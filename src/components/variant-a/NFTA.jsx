@@ -10,7 +10,6 @@ import {
   Plus,
   Minus,
   Gift,
-  Hexagon,
 } from "lucide-react";
 import { useLocale } from "../../i18n";
 import Logo from "../../assets/LOGO-black.svg";
@@ -145,42 +144,47 @@ export default function NFTA() {
 
         {/* NFT hero card */}
         <div className="rounded-[28px] p-1.5 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 shadow-[0_30px_70px_-24px_rgba(15,23,42,0.6)] ring-1 ring-white/5">
-          <div className="relative aspect-[4/3] rounded-[22px] overflow-hidden bg-[#0b1220]">
+          <div className="relative aspect-[4/3] rounded-[28px] overflow-hidden bg-[#0b1220]">
             <div
-              className="absolute inset-0 opacity-40"
+              className="absolute inset-0 opacity-35"
               style={{
                 backgroundImage:
                   "linear-gradient(rgba(56,189,248,0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(56,189,248,0.08) 1px, transparent 1px)",
                 backgroundSize: "28px 28px",
               }}
             />
-            <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-transparent" />
+            <div className="absolute inset-0 bg-gradient-to-t from-slate-950/85 via-transparent to-transparent" />
+            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(56,189,248,0.18),transparent_55%)]" />
 
             <div className="absolute inset-0 flex items-center justify-center">
-              <div className="relative w-32 h-32">
-                <Hexagon
-                  className="absolute top-2 left-8 w-14 h-14 text-cyan-400 fill-cyan-500/25 drop-shadow-[0_0_24px_rgba(34,211,238,0.45)]"
-                  strokeWidth={1.25}
-                />
-                <Hexagon
-                  className="absolute top-10 left-1 w-12 h-12 text-sky-300 fill-sky-400/20"
-                  strokeWidth={1.25}
-                />
-                <Hexagon
-                  className="absolute top-10 right-1 w-12 h-12 text-blue-400 fill-blue-500/20"
-                  strokeWidth={1.25}
-                />
-                <Hexagon
-                  className="absolute bottom-2 left-8 w-11 h-11 text-cyan-300 fill-cyan-400/15"
-                  strokeWidth={1.25}
-                />
-              </div>
+              {/* <img
+                src="/logo-simple.png"
+                alt={displayNftData.nftName || "NFT"}
+                className="w-[160px] h-auto select-none drop-shadow-[0_18px_45px_rgba(56,189,248,0.25)]"
+                draggable={false}
+                onError={(e) => {
+                  e.currentTarget.src = "/logo.svg";
+                }}
+              /> */}
+              <svg animate-spin className="h-[180px] w-[180px] overflow-visible" role="img" aria-label="NFT" viewBox="-34, -30, 246, 202" preserveAspectRatio="xMidYMid meet">
+                <polygon points="0 62.8 0 23 34.5 3 69 23 69 62.8 34.5 82.7" fill="rgba(56, 189, 248)" stroke="rgba(255, 255, 255)" stroke-width="2.3" stroke-linejoin="round"/>
+                
+                <polygon points="33.8 122.6 33.8 82.8 68.3 62.9 102.8 82.8 102.8 122.6 68.3 142.5" fill="rgba(56, 189, 248)" stroke="rgba(255, 255, 255)" stroke-width="2.3" stroke-linejoin="round"/>
+                <polygon points="109.9 119.6 109.9 79.8 144.3 59.8 178.8 79.8 178.8 119.6 144.3 139.5" fill="rgba(56, 189, 248)" stroke="rgba(255, 255, 255)" stroke-width="2.3" stroke-linejoin="round"/>
+                <polygon points="76 59.7 76 19.9 110.5 0 145 19.9 145 59.7 110.5 79.6" fill="rgba(56, 189, 248)" stroke="rgba(255, 255, 255)" stroke-width="2.3" stroke-linejoin="round"/>
+                <path d="M110.5 8 137.5 23.8" fill="rgba(56, 189, 248)" stroke="rgba(255, 255, 255, 0.25)" stroke-width="4" stroke-linejoin="round"></path>
+                <path d="M34.8 11.5 62 27" fill="rgba(56, 189, 248)" stroke="rgba(255, 255, 255, 0.25)" stroke-width="4" stroke-linejoin="round"></path>
+                <path d="M144.3 68.5 171.3 84.1" fill="rgba(56, 189, 248)" stroke="rgba(255, 255, 255, 0.25)" stroke-width="4" stroke-linejoin="round"></path>
+                <path d="M68.3 71.5 95.4 87" fill="rgba(56, 189, 248)" stroke="rgba(255, 255, 255, 0.25)" stroke-width="4" stroke-linejoin="round"></path>
+              </svg>
             </div>
+            <div class="absolute bottom-10 left-1/2 -translate-x-1/2 w-72 h-px bg-gradient-to-r from-transparent via-cyan-300/40 to-transparent"></div>
 
-            <span className="absolute top-3 left-3 inline-flex items-center rounded-full bg-white/10 backdrop-blur-md border border-white/15 px-2.5 py-1 text-[9px] font-bold uppercase tracking-wider text-white/90">
+            <span className="absolute top-3 left-3 inline-flex items-center gap-1.5 rounded-full bg-slate-900/40 backdrop-blur-md border border-white/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-white/90">
+              <span className="h-1.5 w-1.5 rounded-full bg-cyan-300 shadow-[0_0_10px_rgba(34,211,238,0.9)]" />
               {displayNftData.nftSeries || "Genesis"}
             </span>
-            <span className="absolute top-3 right-3 inline-flex items-center rounded-full bg-white/10 backdrop-blur-md border border-white/15 px-2.5 py-1 text-[9px] font-bold tabular-nums text-white/90">
+            <span className="absolute top-3 right-3 inline-flex items-center rounded-full bg-slate-900/40 backdrop-blur-md border border-white/10 px-3 py-1.5 text-[10px] font-bold tabular-nums text-white/90">
               {editionLabel}
             </span>
           </div>

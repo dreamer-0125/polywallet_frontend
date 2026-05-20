@@ -10,7 +10,6 @@ import {
   Plus,
   Minus,
   Gift,
-  Hexagon,
 } from "lucide-react";
 import { useLocale } from "../../i18n";
 import { getNftData, nftMint } from "../../api";
@@ -71,27 +70,19 @@ const PRIVILEGES = [
 
 function NftHeroVisual() {
   return (
-    <div className="relative h-44 w-44">
-      <Hexagon
-        className="absolute left-1/2 top-0 h-14 w-14 -translate-x-1/2 text-cyan-400 fill-cyan-500/25 drop-shadow-[0_0_28px_rgba(34,211,238,0.5)]"
-        strokeWidth={1.25}
-      />
-      <Hexagon
-        className="absolute left-0 top-11 h-[52px] w-[52px] text-sky-300 fill-sky-400/20"
-        strokeWidth={1.25}
-      />
-      <Hexagon
-        className="absolute left-1/2 top-10 h-16 w-16 -translate-x-1/2 text-cyan-300 fill-cyan-400/30 drop-shadow-[0_0_20px_rgba(34,211,238,0.35)]"
-        strokeWidth={1.25}
-      />
-      <Hexagon
-        className="absolute right-0 top-11 h-[52px] w-[52px] text-blue-400 fill-blue-500/20"
-        strokeWidth={1.25}
-      />
-      <Hexagon
-        className="absolute bottom-0 left-1/2 h-12 w-12 -translate-x-1/2 text-cyan-300 fill-cyan-400/15"
-        strokeWidth={1.25}
-      />
+    
+    <div className="absolute inset-0 flex items-center justify-center origin-center animate-[nft-logo-drift_9s_ease-in-out_infinite]">
+      <svg className="relative z-10 flex h-[min(46vh,300px)] w-[min(46vh,300px)] max-h-[62%] max-w-[62%] items-center justify-center overflow-hidden overflow-visible" role="img" aria-label="NFT" viewBox="-34, -30, 246, 202" preserveAspectRatio="xMidYMid meet">
+                <polygon points="0 62.8 0 23 34.5 3 69 23 69 62.8 34.5 82.7" fill="rgba(56, 189, 248)" stroke="rgba(255, 255, 255)" stroke-width="2.3" stroke-linejoin="round"/>
+                
+                <polygon points="33.8 122.6 33.8 82.8 68.3 62.9 102.8 82.8 102.8 122.6 68.3 142.5" fill="rgba(56, 189, 248)" stroke="rgba(255, 255, 255)" stroke-width="2.3" stroke-linejoin="round"/>
+                <polygon points="109.9 119.6 109.9 79.8 144.3 59.8 178.8 79.8 178.8 119.6 144.3 139.5" fill="rgba(56, 189, 248)" stroke="rgba(255, 255, 255)" stroke-width="2.3" stroke-linejoin="round"/>
+                <polygon points="76 59.7 76 19.9 110.5 0 145 19.9 145 59.7 110.5 79.6" fill="rgba(56, 189, 248)" stroke="rgba(255, 255, 255)" stroke-width="2.3" stroke-linejoin="round"/>
+                <path d="M110.5 8 137.5 23.8" fill="rgba(56, 189, 248)" stroke="rgba(255, 255, 255, 0.25)" stroke-width="4" stroke-linejoin="round"></path>
+                <path d="M34.8 11.5 62 27" fill="rgba(56, 189, 248)" stroke="rgba(255, 255, 255, 0.25)" stroke-width="4" stroke-linejoin="round"></path>
+                <path d="M144.3 68.5 171.3 84.1" fill="rgba(56, 189, 248)" stroke="rgba(255, 255, 255, 0.25)" stroke-width="4" stroke-linejoin="round"></path>
+                <path d="M68.3 71.5 95.4 87" fill="rgba(56, 189, 248)" stroke="rgba(255, 255, 255, 0.25)" stroke-width="4" stroke-linejoin="round"></path>
+      </svg>
     </div>
   );
 }
@@ -191,15 +182,16 @@ export default function NFTADesktop() {
                   className="absolute inset-0 opacity-40"
                   style={{
                     backgroundImage:
-                      "linear-gradient(rgba(56,189,248,0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(56,189,248,0.08) 1px, transparent 1px)",
-                    backgroundSize: "28px 28px",
+                      "linear-gradient(rgba(56,189,248,0.18) 1px, transparent 1px), linear-gradient(90deg, rgba(56,189,248,0.18) 1px, transparent 1px)",
+                    backgroundSize: "40px 40px",
                   }}
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-transparent to-transparent" />
 
-                <div className="absolute inset-0 flex items-center justify-center">
+                <div className="pointer-events-none select-none w-full h-full max-w-full max-h-full" aria-hidden="true">
                   <NftHeroVisual />
                 </div>
+                <div class="absolute bottom-10 left-1/2 -translate-x-1/2 w-72 h-px bg-gradient-to-r from-transparent via-cyan-300/40 to-transparent"></div>
 
                 <span className="absolute top-4 left-4 inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-white backdrop-blur-md">
                   <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.9)]" />
