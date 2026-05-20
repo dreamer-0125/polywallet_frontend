@@ -41,7 +41,16 @@ export default function WalletADesktop() {
   const { t } = useLocale();
 
   const { setLoading } = useLoadingContext();
-  const { user, refreshUser } = useAuth();
+  const { user, setUser, refreshUser } = useAuth();
+
+  const applyDepositSuccess = async (response) => {
+    if (response?.user) {
+      setUser((prev) =>
+        prev ? { ...prev, ...response.user } : response.user,
+      );
+    }
+    await refreshUser();
+  };
   const { address } = useAccount();
   const { data: rawUsdcBalance } = useReadContract({
     address: POLYGON_USDC,
@@ -171,13 +180,24 @@ export default function WalletADesktop() {
           return;
         }
 
-        const response = await deposit(numericAmount, txHash);
+        let response;
+        try {
+          response = await deposit(numericAmount, txHash);
+        } catch (apiErr) {
+          const msg =
+            apiErr?.response?.data?.message ||
+            "Deposit could not be credited. Your USDC transfer may still have succeeded — contact support with your tx hash.";
+          toast.error(msg);
+          setLoading(false);
+          return;
+        }
+
         if (response?.depositRequest?.status === "approved") {
           toast.success(response.message || "Deposit successful");
-          refreshUser();
+          await applyDepositSuccess(response);
         } else if (response?.depositRequest) {
           toast.success(response.message || "Deposit submitted");
-          refreshUser();
+          await applyDepositSuccess(response);
         } else {
           toast.warn(response?.message || "Deposit failed");
         }
@@ -271,36 +291,36 @@ export default function WalletADesktop() {
           </h2>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
-              <div className="h-[121px] rounded-2xl border border-gray-200 bg-white px-5 py-4 shadow-[0_2px_12px_rgba(15,23,42,0.04)]">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-gray-500">
+        <div className="grid min-w-0 grid-cols-2 gap-3">
+              <div className="min-w-0 overflow-hidden rounded-2xl border border-gray-200 bg-white px-4 py-4 shadow-[0_2px_12px_rgba(15,23,42,0.04)]">
+                <p className="truncate text-[10px] font-bold uppercase tracking-wider text-gray-500">
                   {t("totalInvest", "TOTAL INTEREST")}
                 </p>
                 <p className="mt-3 text-[26px] font-black text-gray-900">
                   ${formatAmount(user.interest)}
                 </p>
-                <div className="mt-2 flex items-center justify-between">
-                  <p className="text-xs font-bold text-blue-600">
+                <div className="mt-2 flex min-w-0 flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="truncate text-xs font-bold text-blue-600">
                     + ${formatAmount(user.dailyInterest)}
                   </p>
-                  <span className="rounded border border-gray-200 bg-gray-50 px-1.5 py-0.5 text-[10px] font-bold text-gray-500">
-                    {t("apy", "APY")} {interestApyLabel}
+                  <span className="w-fit max-w-full truncate rounded border border-gray-200 bg-gray-50 px-1.5 py-0.5 text-[10px] font-bold text-gray-500">
+                    {interestApyLabel} {t("apy", "APY")}
                   </span>
                 </div>
               </div>
-              <div className="h-[121px] rounded-2xl border border-gray-200 bg-white px-5 py-4 shadow-[0_2px_12px_rgba(15,23,42,0.04)]">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-gray-500">
+              <div className="min-w-0 overflow-hidden rounded-2xl border border-gray-200 bg-white px-4 py-4 shadow-[0_2px_12px_rgba(15,23,42,0.04)]">
+                <p className="truncate text-[10px] font-bold uppercase tracking-wider text-gray-500">
                   {t("totalBonus", "Total Bonus")}
                 </p>
                 <p className="mt-3 text-[26px] font-black text-gray-900">
                   ${formatAmount(user.bonus)}
                 </p>
-                <div className="mt-2 flex items-center justify-between">
-                  <p className="text-xs font-bold text-blue-600">
+                <div className="mt-2 flex min-w-0 flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="truncate text-xs font-bold text-blue-600">
                     + ${formatAmount(user.dailyBonus)}
                   </p>
-                  <span className="rounded border border-gray-200 bg-gray-50 px-1.5 py-0.5 text-[10px] font-bold text-gray-500">
-                    {t("commission", "Commission")} {commissionLabel}
+                  <span className="w-fit max-w-full truncate rounded border border-gray-200 bg-gray-50 px-1.5 py-0.5 text-[10px] font-bold text-gray-500">
+                    {commissionLabel}
                   </span>
                 </div>
               </div>

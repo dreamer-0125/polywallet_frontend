@@ -55,6 +55,15 @@ export default function WalletA() {
   const { t } = useLocale();
   const { setLoading } = useLoadingContext();
   const { user, setUser, refreshUser } = useAuth();
+
+  const applyDepositSuccess = async (response) => {
+    if (response?.user) {
+      setUser((prev) =>
+        prev ? { ...prev, ...response.user } : response.user,
+      );
+    }
+    await refreshUser();
+  };
   const { address } = useAccount();
   const { data: rawUsdcBalance } = useReadContract({
     address: POLYGON_USDC,
@@ -186,13 +195,24 @@ export default function WalletA() {
           return;
         }
 
-        const response = await deposit(numericAmount, txHash);
+        let response;
+        try {
+          response = await deposit(numericAmount, txHash);
+        } catch (apiErr) {
+          const msg =
+            apiErr?.response?.data?.message ||
+            "Deposit could not be credited. Your USDC transfer may still have succeeded — contact support with your tx hash.";
+          toast.error(msg);
+          setLoading(false);
+          return;
+        }
+
         if (response?.depositRequest?.status === "approved") {
           toast.success(response.message || "Deposit successful");
-          refreshUser();
+          await applyDepositSuccess(response);
         } else if (response?.depositRequest) {
           toast.success(response.message || "Deposit submitted");
-          refreshUser();
+          await applyDepositSuccess(response);
         } else {
           toast.warn(response?.message || "Deposit failed");
         }
@@ -287,36 +307,36 @@ export default function WalletA() {
               </h2>
             </div>
 
-            <div className="mt-[10px] flex gap-[13px]">
-              <div className="bg-white px-4 py-[15px] h-[121px] rounded-2xl flex-1 border border-gray-300">
-                <p className="text-[10px] uppercase font-bold text-gray-500 tracking-wider">
+            <div className="mt-[10px] grid min-w-0 grid-cols-2 gap-2 sm:gap-[13px]">
+              <div className="min-w-0 overflow-hidden rounded-2xl border border-gray-300 bg-white px-2.5 py-3 sm:px-4 sm:py-[15px]">
+                <p className="truncate text-[9px] font-bold uppercase tracking-wider text-gray-500 sm:text-[10px]">
                   {t("totalInvest", "TOTAL INTEREST")}
                 </p>
-                <p className="text-[26px] font-black text-gray-900 mt-3">
+                <p className="mt-2 text-xl font-black text-gray-900 sm:mt-3 sm:text-[26px]">
                   ${formatAmount(user.interest)}
                 </p>
-                <div className="mt-2 flex items-center justify-between">
-                  <p className="text-[12px] text-blue-600 font-bold">
+                <div className="mt-2 flex min-w-0 flex-col gap-1">
+                  <p className="truncate text-[11px] font-bold text-blue-600 sm:text-[12px]">
                     + ${formatAmount(user.dailyInterest)}
                   </p>
-                  <span className="text-[11px] font-bold text-gray-500 bg-gray-50 px-1.5 py-0.5 rounded border border-gray-200">
-                    {t("apy", "APY")} {interestApyLabel}
+                  <span className="w-fit max-w-full truncate rounded border border-gray-200 bg-gray-50 px-1.5 py-0.5 text-[10px] font-bold text-gray-500">
+                    {interestApyLabel} {t("apy", "APY")}
                   </span>
                 </div>
               </div>
-              <div className="bg-white px-4 py-[15px] h-[121px] rounded-2xl flex-1 border border-gray-300">
-                <p className="text-[10px] uppercase font-bold text-gray-500 tracking-wider">
+              <div className="min-w-0 overflow-hidden rounded-2xl border border-gray-300 bg-white px-2.5 py-3 sm:px-4 sm:py-[15px]">
+                <p className="truncate text-[9px] font-bold uppercase tracking-wider text-gray-500 sm:text-[10px]">
                   {t("totalBonus", "Total Bonus")}
                 </p>
-                <p className="text-[26px] font-black text-gray-900 mt-3">
+                <p className="mt-2 text-xl font-black text-gray-900 sm:mt-3 sm:text-[26px]">
                   ${formatAmount(user.bonus)}
                 </p>
-                <div className="mt-2 flex items-center justify-between">
-                  <p className="text-[12px] text-blue-600 font-bold">
+                <div className="mt-2 flex min-w-0 flex-col gap-1">
+                  <p className="truncate text-[11px] font-bold text-blue-600 sm:text-[12px]">
                     + ${formatAmount(user.dailyBonus)}
                   </p>
-                  <span className="text-[11px] font-bold text-gray-500 bg-gray-50 px-1.5 py-0.5 rounded border border-gray-200">
-                    {t("commission", "Commission")} {commissionLabel}
+                  <span className="w-fit max-w-full truncate rounded border border-gray-200 bg-gray-50 px-1.5 py-0.5 text-[10px] font-bold text-gray-500">
+                    {commissionLabel}
                   </span>
                 </div>
               </div>

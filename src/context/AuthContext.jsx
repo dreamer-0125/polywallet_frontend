@@ -97,12 +97,18 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   useEffect(() => {
-    if (!sessionChecked || !user?.walletAddress || !address) return;
-    if (user.walletAddress.toLowerCase() !== address.toLowerCase()) {
-      setUser(null);
-      logoutApi().catch(() => {});
-    }
-  }, [sessionChecked, user, address]);
+    if (!sessionChecked || !user?.walletAddress || !address || !isConnected) return;
+    const timer = setTimeout(() => {
+      if (user.walletAddress.toLowerCase() !== address.toLowerCase()) {
+        toast.warn(
+          "Connected wallet does not match your PolyWallet account. Sign in with the correct wallet.",
+        );
+        setUser(null);
+        logoutApi().catch(() => {});
+      }
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, [sessionChecked, user, address, isConnected]);
 
   useEffect(() => {
     if (!isConnected) return;
@@ -115,12 +121,7 @@ export const AuthProvider = ({ children }) => {
       wrongChainNotifiedRef.current = chainId;
       toast.error(WRONG_NETWORK_MESSAGE);
     }
-
-    if (user) {
-      setUser(null);
-      logoutApi().catch(() => {});
-    }
-  }, [chainId, isConnected, user]);
+  }, [chainId, isConnected]);
 
   const notifyPolygonRequired = (result) => {
     if (result.missingChain) {
@@ -311,28 +312,39 @@ export const AuthProvider = ({ children }) => {
       const res = await fetchMe();
       if (res?.success && res.user) {
         setUser(res.user);
+        return res.user;
       }
     } catch (err) {
       // /me not yet deployed (404) or transient error — fall back to session endpoint
-      // so balance/rank still refreshes even before the backend is redeployed
       if (err?.response?.status === 404 || !err?.response) {
         try {
           const res = await fetchAuthSession();
           if (res?.success && res.user) {
             setUser((prev) => (prev ? { ...prev, ...res.user } : res.user));
+            return res.user;
           }
         } catch {
           /* ignore */
         }
       }
     }
+    return null;
   }, []);
 
-  // Poll every 10 s while user is logged in so admin balance edits reflect quickly
+  // Poll while logged in; refresh when returning from background (common on mobile)
   useEffect(() => {
     if (!user?.id) return;
     const id = setInterval(refreshUser, 10_000);
-    return () => clearInterval(id);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") {
+        refreshUser();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, [user?.id, refreshUser]);
 
   const logout = useCallback(async () => {

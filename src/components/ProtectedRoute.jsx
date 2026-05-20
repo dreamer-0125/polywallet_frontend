@@ -14,11 +14,12 @@ const ProtectedRoute = () => {
     return <LoadingSpinner active />;
   }
 
-  if (!isConnected || !user) {
+  // JWT session is the source of truth — WalletConnect may drop while the app is backgrounded
+  if (!user) {
     return <Navigate to="/" replace />;
   }
 
-  if (!isPolygonChain(chainId)) {
+  if (isConnected && chainId != null && !isPolygonChain(chainId)) {
     return <Navigate to="/" replace />;
   }
 
