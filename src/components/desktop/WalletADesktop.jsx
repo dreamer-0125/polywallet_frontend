@@ -19,6 +19,11 @@ import { format } from "date-fns";
 import { deposit, lookupRecipientByPolyWalletId, sendBalance, withdraw } from "../../api";
 import { toast } from "react-toastify";
 import { POLYGON_USDC } from "../../config";
+import { ensurePolygonChain } from "../../utils/polygonChain";
+import {
+  getDepositTransferErrorMessage,
+  sendUsdcDeposit,
+} from "../../utils/usdcDeposit";
 
 const ERC20_BALANCE_ABI = [
   {
@@ -47,7 +52,6 @@ export default function WalletADesktop() {
   const walletUsdcBalance = rawUsdcBalance != null ? Number(rawUsdcBalance) / 1e6 : 0;
   const [activeModal, setActiveModal] = useState(null);
   const [amount, setAmount] = useState("");
-  const [txHash, setTxHash] = useState("");
   const [recipient, setRecipient] = useState(null);
   const [showAllTransactions, setShowAllTransactions] = useState(false);
   const [isMatch, setIsMatch] = useState(true);
@@ -84,7 +88,6 @@ export default function WalletADesktop() {
   const openModal = async (modal) => {
     setActiveModal(modal);
     setAmount("");
-    setTxHash("");
 
     if (modal == "send") {
       setRecipient(null);
@@ -96,7 +99,6 @@ export default function WalletADesktop() {
   const closeModal = () => {
     setActiveModal(null);
     setAmount("");
-    setTxHash("");
     setRecipient("");
   };
 
@@ -132,20 +134,44 @@ export default function WalletADesktop() {
     setLoading(true);
     try {
       if (activeModal === "deposit") {
-        if (!txHash.trim()) {
-          toast.error("Transaction hash is required");
-          setLoading(false);
-          return;
-        }
         const numericAmount = Number(amount);
         if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
           toast.error("Enter a valid deposit amount");
           setLoading(false);
           return;
         }
-        const response = await deposit(numericAmount, txHash.trim());
+        if (!address) {
+          toast.error("Connect your wallet before depositing");
+          setLoading(false);
+          return;
+        }
+        if (numericAmount > walletUsdcBalance) {
+          toast.info("Insufficient USDC balance in your wallet");
+          setLoading(false);
+          return;
+        }
+        if (!(await ensurePolygonChain())) {
+          setLoading(false);
+          return;
+        }
+
+        let txHash;
+        try {
+          toast.info("Confirm the USDC transfer in your wallet…");
+          txHash = await sendUsdcDeposit({
+            amount: numericAmount,
+            account: address,
+          });
+        } catch (transferErr) {
+          toast.error(getDepositTransferErrorMessage(transferErr));
+          setLoading(false);
+          return;
+        }
+
+        const response = await deposit(numericAmount, txHash);
         if (response?.depositRequest) {
           toast.success(response.message || "Deposit request submitted");
+          refreshUser();
         } else {
           toast.warn(response?.message || "Deposit request failed");
         }
@@ -415,21 +441,6 @@ export default function WalletADesktop() {
                         </span>
                       </p>
                     </div>
-                    {/* <div className="space-y-2">
-                      <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">
-                        {t("txHash", "Transaction Hash")}
-                      </label>
-                      <textarea
-                        placeholder={t(
-                          "enterTxHash",
-                          "Enter the transaction hash from your USDT transfer"
-                        )}
-                        value={txHash}
-                        onChange={(e) => setTxHash(e.target.value)}
-                        rows={3}
-                        className="w-full bg-gray-50 rounded-[20px] px-5 py-4 font-bold text-sm text-gray-900 outline-none focus:ring-2 focus:ring-blue-500/20 resize-none"
-                      />
-                    </div> */}
                     <button
                       onClick={handleAction}
                       className="w-full py-4 bg-blue-600 text-white rounded-[20px] font-bold text-lg shadow-lg hover:bg-blue-700 active:scale-[0.98] transition-all"

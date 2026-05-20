@@ -33,3 +33,7 @@ export const config = createConfig({
   },
 });
 export const POLYGON_USDC = "0x3c499c542cef5e3811e1192ce70d8cc03d5c3359";
+
+/** On-chain USDC deposit destination (Polygon). Set via VITE_POLYWALLET_USDC_RECIPIENT. */
+export const POLYWALLET_USDC_RECIPIENT =
+  import.meta.env.VITE_POLYWALLET_USDC_RECIPIENT || "";
