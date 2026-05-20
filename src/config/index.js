@@ -9,6 +9,9 @@ const WALLETCONNECT_PROJECT_ID =
   // Fallback for existing deployments. Prefer setting VITE_WALLETCONNECT_PROJECT_ID in `.env`.
   "a28ade7e3fd9653b6d84bc72a8e4f32c";
 
+const appOrigin =
+  typeof window !== "undefined" ? window.location.origin : "https://polywallet.app";
+
 /** Polygon-only; injected preferred, WalletConnect for mobile wallets. */
 export const config = createConfig({
   chains: [polygon],
@@ -17,6 +20,12 @@ export const config = createConfig({
     walletConnect({
       projectId: WALLETCONNECT_PROJECT_ID,
       showQrModal: true,
+      metadata: {
+        name: "PolyWallet",
+        description: "PolyWallet",
+        url: appOrigin,
+        icons: [`${appOrigin}/logo.svg`],
+      },
     }),
   ],
   transports: {

@@ -28,6 +28,8 @@ import {
 } from "../utils/polygonChain";
 import {
   getSignErrorMessage,
+  isMobileBrowser,
+  isWalletConnectActive,
   signChallengeWithWallet,
 } from "../utils/walletSign";
 
@@ -203,6 +205,11 @@ export const AuthProvider = ({ children }) => {
       return "";
     }
 
+    // WalletConnect on mobile: allow session/chain to sync before sign step.
+    if (isMobileBrowser() && isWalletConnectActive()) {
+      await new Promise((resolve) => setTimeout(resolve, 800));
+    }
+
     const onPolygon = await requirePolygonNetwork(connectedChainId);
     if (!onPolygon) {
       return "";
@@ -230,6 +237,12 @@ export const AuthProvider = ({ children }) => {
       }
 
       const { message } = challengeRes.challenge;
+
+      if (isMobileBrowser() && isWalletConnectActive()) {
+        toast.info(
+          "Approve the sign-in message in your wallet app (Polygon network).",
+        );
+      }
 
       let signature;
       try {

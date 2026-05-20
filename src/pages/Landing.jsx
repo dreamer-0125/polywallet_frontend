@@ -71,7 +71,7 @@ export default function Landing() {
       </div>
 
       {/* Connect action */}
-      <div className="w-full max-w-md mx-auto p-6 pb-10 md:max-w-none md:w-auto md:p-0 md:pb-0">
+      <div className="w-full max-w-md mx-auto p-6 pb-20 md:max-w-none md:w-auto md:p-0 md:pb-0">
         <div className="bg-white rounded-[32px] p-2 shadow-[0_20px_40px_-10px_rgba(0,0,0,0.05)] md:w-[400px] md:p-8">
           <button
             onClick={handleConnect}
