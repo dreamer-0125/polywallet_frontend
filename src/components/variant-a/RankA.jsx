@@ -6,13 +6,15 @@ import { useLocale } from "../../i18n";
 import Logo from "../../assets/LOGO-black.svg";
 import { useAuth } from "../../context/AuthContext";
 import { useLoadingContext } from "../../context/LoadingContext";
-import { RankData, rankMeta } from "../../config/data.config";
+import { rankMeta } from "../../config/data.config";
+import { useWalletConfig, formatRatePercent } from "../../context/WalletConfigContext";
 import { getReferralData } from "../../api";
 import TeamTreeUI from "../shared/teamStructure";
 export default function RankA() {
   const { t } = useLocale();
   const [showQr, setShowQr] = useState(false);
   const { user } = useAuth();
+  const { getRankStats } = useWalletConfig();
   const { setLoading } = useLoadingContext();
   const [teamStructure, setTeamStructure] = useState({});
 
@@ -20,7 +22,13 @@ export default function RankA() {
   const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(referralLink)}`;
 
   const rankKey = user?.rank ?? "";
-  const rankStats = RankData[rankKey] ?? RankData[""];
+  const rankStats = getRankStats(rankKey);
+  const commissionLabel = formatRatePercent(
+    user?.rates?.bonusRate ?? rankStats.bonusRate
+  );
+  const pointBoostLabel = formatRatePercent(
+    user?.rates?.pointApy ?? rankStats.pointApy
+  );
   const rankInfo = rankMeta[rankKey] ?? rankMeta["-"];
   const RankIcon = rankInfo.icon;
 
@@ -86,7 +94,7 @@ export default function RankA() {
                   {t("commission", "Commission")}
                 </p>
                 <p className="text-2xl font-black text-green-600 tabular-nums">
-                  {rankStats.bonusRate * 100}%
+                  {commissionLabel}
                 </p>
               </div>
               <div className="bg-gray-50 rounded-[18px] p-3 border border-gray-100">
@@ -94,7 +102,7 @@ export default function RankA() {
                   {t("pointBoost", "Point Boost")}
                 </p>
                 <p className="text-2xl font-black text-blue-600 tabular-nums">
-                  {rankStats.pointApy * 100}%
+                  {pointBoostLabel}
                 </p>
               </div>
             </div>

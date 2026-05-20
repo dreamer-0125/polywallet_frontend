@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import LayoutADesktop from "./LayoutADesktop";
 import HeaderActionsA from "../variant-a/HeaderActionsA";
 import {
@@ -16,6 +16,8 @@ import { getNftData, nftMint } from "../../api";
 import { toast } from "react-toastify";
 import { useLoadingContext } from "../../context/LoadingContext";
 import { useAuth } from "../../context/AuthContext";
+import { useWalletConfig, formatRatePercent } from "../../context/WalletConfigContext";
+
 const DEFAULT_NFT_DATA = {
   nftPrice: 1000,
   mintedNfts: 3247,
@@ -41,33 +43,6 @@ function formatSupply(amount) {
   return n.toLocaleString("en-US");
 }
 
-const PRIVILEGES = [
-  {
-    icon: Sparkles,
-    labelKey: "exclusiveAirdropRewards",
-    labelDefault: "Exclusive Airdrop Rewards",
-    color: "text-yellow-600 bg-yellow-50",
-  },
-  {
-    icon: Zap,
-    labelKey: "upToPointBoost",
-    labelDefault: "Up to 60% Point Boost",
-    color: "text-purple-600 bg-purple-50",
-  },
-  {
-    icon: TrendingUp,
-    labelKey: "apyDailyInterestLabel",
-    labelDefault: "10% APY Daily Interest",
-    color: "text-green-600 bg-green-50",
-  },
-  {
-    icon: ShieldCheck,
-    labelKey: "ambassadorProgramAccess",
-    labelDefault: "Ambassador Program Access",
-    color: "text-blue-600 bg-blue-50",
-  },
-];
-
 function NftHeroVisual() {
   return (
     
@@ -91,6 +66,36 @@ export default function NFTADesktop() {
   const { t } = useLocale();
   const { setLoading } = useLoadingContext();
   const { user, setUser } = useAuth();
+  const { balanceInterestApy, maxPointApy } = useWalletConfig();
+  const privileges = useMemo(
+    () => [
+      {
+        icon: Sparkles,
+        labelKey: "exclusiveAirdropRewards",
+        labelDefault: "Exclusive Airdrop Rewards",
+        color: "text-yellow-600 bg-yellow-50",
+      },
+      {
+        icon: Zap,
+        labelKey: "upToPointBoost",
+        labelDefault: `Up to ${formatRatePercent(maxPointApy)} Point Boost`,
+        color: "text-purple-600 bg-purple-50",
+      },
+      {
+        icon: TrendingUp,
+        labelKey: "apyDailyInterestLabel",
+        labelDefault: `${formatRatePercent(balanceInterestApy)} APY Daily Interest`,
+        color: "text-green-600 bg-green-50",
+      },
+      {
+        icon: ShieldCheck,
+        labelKey: "ambassadorProgramAccess",
+        labelDefault: "Ambassador Program Access",
+        color: "text-blue-600 bg-blue-50",
+      },
+    ],
+    [balanceInterestApy, maxPointApy]
+  );
   const [showMintModal, setShowMintModal] = useState(false);
   const [quantity, setQuantity] = useState(1);
   const [nftData, setNftData] = useState({});
@@ -321,7 +326,7 @@ export default function NFTADesktop() {
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-            {PRIVILEGES.map((item, i) => (
+            {privileges.map((item, i) => (
               <div
                 key={item.labelKey}
                 className="bg-white p-5 rounded-[24px] border border-gray-200/80 shadow-[0_2px_10px_rgba(15,23,42,0.04)] hover:shadow-[0_8px_30px_rgba(15,23,42,0.08)] hover:-translate-y-0.5 transition-all duration-300 group"

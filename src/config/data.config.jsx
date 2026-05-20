@@ -8,53 +8,7 @@ import {
   Zap,
 } from "lucide-react";
 
-export const RankData = {
-  JPManager: {
-    bonusRate: 0.5,
-    bonusLevel: 1000000000,
-    pointApy: 0.6,
-  },
-  Special: {
-    bonusRate: 0.45,
-    bonusLevel: 7, // only referral bonus till the level 6
-    pointApy: 0.6,
-  },
-  Diamond: {
-    bonusRate: 0.4,
-    bonusLevel: 6, // only referral bonus till the level 6
-    pointApy: 0.6,
-  },
-  Black: {
-    bonusRate: 0.35,
-    bonusLevel: 5,
-    pointApy: 0.5,
-  },
-  Platinum: {
-    bonusRate: 0.3,
-    bonusLevel: 4,
-    pointApy: 0.4,
-  },
-  Gold: {
-    bonusRate: 0.25,
-    bonusLevel: 3,
-    pointApy: 0.3,
-  },
-  Silver: {
-    bonusRate: 0.2,
-    bonusLevel: 2,
-    pointApy: 0.2,
-  },
-  Bronze: {
-    bonusRate: 0.1,
-    bonusLevel: 1,
-    pointApy: 0.1,
-  },
-  "": {
-    bonusRate: 0,
-    bonusLevel: 0,
-    pointApy: 0,
-  },
-};
+/** Rank rates (bonusRate, pointApy) come from GET /user/wallet-config via useWalletConfig(). */
 
 const NoRankIcon = () => {
   return <span className="text-gray-500 font-bold">◆</span>;

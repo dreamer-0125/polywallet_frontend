@@ -18,6 +18,7 @@ import {
 import Logo from "../../assets/LOGO-black.svg";
 import { useLoadingContext } from "../../context/LoadingContext";
 import { useAuth } from "../../context/AuthContext";
+import { formatRatePercent } from "../../context/WalletConfigContext";
 import {
   deposit,
   lookupRecipientByPolyWalletId,
@@ -71,6 +72,8 @@ export default function WalletA() {
   const [isMatch, setIsMatch] = useState(true);
   const [walletID, setWalletID] = useState("");
   const recipientLookupTimer = useRef(null);
+  const interestApyLabel = formatRatePercent(user?.rates?.balanceInterestApy);
+  const commissionLabel = formatRatePercent(user?.rates?.bonusRate);
 
   // Responsive Guard: Redirect to Desktop if screen grows (>= 768px)
   useEffect(() => {
@@ -184,11 +187,14 @@ export default function WalletA() {
         }
 
         const response = await deposit(numericAmount, txHash);
-        if (response?.depositRequest) {
-          toast.success(response.message || "Deposit request submitted");
+        if (response?.depositRequest?.status === "approved") {
+          toast.success(response.message || "Deposit successful");
+          refreshUser();
+        } else if (response?.depositRequest) {
+          toast.success(response.message || "Deposit submitted");
           refreshUser();
         } else {
-          toast.warn(response?.message || "Deposit request failed");
+          toast.warn(response?.message || "Deposit failed");
         }
         closeModal();
       } else if (activeModal === "withdraw") {
@@ -294,7 +300,7 @@ export default function WalletA() {
                     + ${formatAmount(user.dailyInterest)}
                   </p>
                   <span className="text-[11px] font-bold text-gray-500 bg-gray-50 px-1.5 py-0.5 rounded border border-gray-200">
-                    {t("apy", "APY")} 10%
+                    {t("apy", "APY")} {interestApyLabel}
                   </span>
                 </div>
               </div>
@@ -310,7 +316,7 @@ export default function WalletA() {
                     + ${formatAmount(user.dailyBonus)}
                   </p>
                   <span className="text-[11px] font-bold text-gray-500 bg-gray-50 px-1.5 py-0.5 rounded border border-gray-200">
-                    {t("apy", "APY")} 10%
+                    {t("commission", "Commission")} {commissionLabel}
                   </span>
                 </div>
               </div>

@@ -16,12 +16,20 @@ import { useLoadingContext } from "../../context/LoadingContext";
 import { useAuth } from "../../context/AuthContext";
 import TeamTreeUI from "../shared/teamStructure";
 import { getReferralData } from "../../api";
-import { RankData } from "../../config/data.config";
+import { useWalletConfig, formatRatePercent } from "../../context/WalletConfigContext";
 
 export default function RankADesktop() {
   const { t } = useLocale();
   const { setLoading } = useLoadingContext();
   const { user } = useAuth();
+  const { getRankStats } = useWalletConfig();
+  const rankStats = getRankStats(user?.rank);
+  const commissionLabel = formatRatePercent(
+    user?.rates?.bonusRate ?? rankStats.bonusRate
+  );
+  const pointBoostLabel = formatRatePercent(
+    user?.rates?.pointApy ?? rankStats.pointApy
+  );
   const [showQr, setShowQr] = useState(false);
   const [teamStructure, setTeamStructure] = useState({});
 
@@ -88,13 +96,13 @@ export default function RankADesktop() {
                     <p className="text-xs text-gray-400 font-bold uppercase mb-2">
                       {t("commission", "Commission")}
                     </p>
-                    <p className="text-3xl font-black text-green-600">{RankData[user.rank].bonusRate * 100}%</p>
+                    <p className="text-3xl font-black text-green-600">{commissionLabel}</p>
                   </div>
                   <div className="bg-gray-50 rounded-[24px] p-5 border border-gray-100">
                     <p className="text-xs text-gray-400 font-bold uppercase mb-2">
                       {t("pointBoost", "Point Boost")}
                     </p>
-                    <p className="text-3xl font-black text-blue-600">{RankData[user.rank].pointApy * 100}%</p>
+                    <p className="text-3xl font-black text-blue-600">{pointBoostLabel}</p>
                   </div>
                 </div>
               </div>

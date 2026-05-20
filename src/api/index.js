@@ -17,4 +17,5 @@ export {
   getReferralData,
   lookupRecipientByPolyWalletId,
   fetchMe,
+  fetchWalletConfig,
 } from "./user.api.js";

@@ -160,3 +160,13 @@ export const fetchMe = async () => {
     throw error;
   }
 };
+
+export const fetchWalletConfig = async () => {
+  try {
+    const response = await apiClient.get("/user/wallet-config");
+    return response.data;
+  } catch (error) {
+    console.error("fetchWalletConfig error:", error);
+    throw error;
+  }
+};

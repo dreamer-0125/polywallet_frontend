@@ -13,7 +13,7 @@ import {
 import { useLocale } from "../../i18n";
 import { useAuth } from "../../context/AuthContext";
 import { getAirdrop } from "../../api";
-import { RankData } from "../../config/data.config";
+import { useWalletConfig, formatRatePercent } from "../../context/WalletConfigContext";
 import { useLoadingContext } from "../../context/LoadingContext";
 
 export default function PointADesktop() {
@@ -24,7 +24,11 @@ export default function PointADesktop() {
     return safe.toLocaleString("en-US");
   };
   const { user } = useAuth();
+  const { getRankStats } = useWalletConfig();
   const { setLoading } = useLoadingContext();
+  const pointApyLabel = formatRatePercent(
+    user?.rates?.pointApy ?? getRankStats(user?.rank).pointApy
+  );
   const [airdropData, setAirdropData] = useState([]);
 
   const init = useCallback(async () => {
@@ -114,7 +118,7 @@ export default function PointADesktop() {
                 <div className="flex items-center gap-2 text-white mb-1">
                   <Zap size={16} fill="currentColor" />
                   <span className="text-sm font-bold uppercase">
-                    {(RankData[user?.rank ?? ""]?.pointApy ?? 0) * 100}% APY
+                    {pointApyLabel} APY
                   </span>
                 </div>
                 <p className="text-xs text-white/80 font-medium">
