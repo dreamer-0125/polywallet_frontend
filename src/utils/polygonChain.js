@@ -24,7 +24,7 @@ export function getInjectedConnector(connectors) {
 }
 
 export const NO_INJECTED_WALLET_MESSAGE =
-  "No browser wallet found. Install MetaMask (or another Web3 extension) and refresh this page.";
+  "No browser wallet detected. Install MetaMask (extension) or open this site in a wallet in-app browser. On mobile, you can also connect via WalletConnect.";
 
 export const NO_POLYGON_CHAIN_MESSAGE =
   "Polygon is not in your wallet. Add the Polygon network in your wallet settings, or approve the add-network prompt when it appears.";

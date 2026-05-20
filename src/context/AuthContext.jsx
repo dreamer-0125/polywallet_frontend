@@ -137,7 +137,11 @@ export const AuthProvider = ({ children }) => {
   };
 
   const connectWallet = async () => {
-    const injectedConnector = getInjectedConnector(connectors);
+    const hasInjectedProvider =
+      typeof window !== "undefined" && !!window.ethereum?.request;
+    const injectedConnector = hasInjectedProvider
+      ? getInjectedConnector(connectors)
+      : null;
     const walletConnectConnector =
       connectors.find((c) => c.type === "walletConnect") ??
       connectors.find((c) => String(c.id).toLowerCase().includes("walletconnect")) ??
@@ -178,10 +182,17 @@ export const AuthProvider = ({ children }) => {
           String(err?.message || "")
             .toLowerCase()
             .includes("rejected");
+        const missingProvider =
+          !hasInjectedProvider &&
+          (String(err?.message || "").toLowerCase().includes("provider") ||
+            String(err?.message || "").toLowerCase().includes("injected") ||
+            String(err?.message || "").toLowerCase().includes("ethereum"));
         toast.error(
           rejected
             ? "Wallet connection was cancelled."
-            : "Failed to connect wallet. Unlock your extension and try again.",
+            : missingProvider
+              ? "No browser wallet detected. On mobile, use WalletConnect or open this site inside your wallet’s in-app browser."
+              : "Failed to connect wallet. Unlock your wallet and try again.",
         );
         return "";
       }
