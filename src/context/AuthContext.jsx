@@ -20,12 +20,23 @@ import {
 import { toast } from "react-toastify";
 import {
   ensurePolygonChain,
-  getInjectedConnector,
   isPolygonChain,
-  NO_INJECTED_WALLET_MESSAGE,
   NO_POLYGON_CHAIN_MESSAGE,
   WRONG_NETWORK_MESSAGE,
 } from "../utils/polygonChain";
+import {
+  openBitgetInstallPage,
+  isBitgetInAppBrowser,
+} from "../utils/bitgetWallet.js";
+import { NO_BITGET_WALLET_MSG } from "../config/wallets.js";
+import { resolveBitgetConnector } from "../utils/walletConnectors.js";
+import { safeConnect } from "../utils/walletConnection.js";
+import {
+  createBitgetWalletConnectHandoff,
+  getLastBitgetWalletConnectUri,
+  isMobileWebWithoutBitget,
+  openBitgetWalletConnectUri,
+} from "../utils/walletConnectMobile.js";
 import {
   getSignErrorMessage,
   isMobileBrowser,
@@ -141,29 +152,43 @@ export const AuthProvider = ({ children }) => {
   };
 
   const connectWallet = async () => {
-    const hasInjectedProvider =
-      typeof window !== "undefined" && !!window.ethereum?.request;
-    const injectedConnector = hasInjectedProvider
-      ? getInjectedConnector(connectors)
+    const handoff = isMobileWebWithoutBitget()
+      ? createBitgetWalletConnectHandoff()
       : null;
-    const walletConnectConnector =
-      connectors.find((c) => c.type === "walletConnect") ??
-      connectors.find((c) => String(c.id).toLowerCase().includes("walletconnect")) ??
-      null;
 
-    const preferredConnector = injectedConnector ?? walletConnectConnector;
-    if (!preferredConnector) {
+    const { connector, isBitget, needsInstall } =
+      await resolveBitgetConnector(connectors);
+
+    if (!connector) {
       toast.error(
-        "No wallet connector available. Install MetaMask (mobile/extension) or enable WalletConnect.",
+        "Cannot connect. Install Bitget Wallet and try again.",
       );
+      openBitgetInstallPage();
       return "";
     }
-    if (!injectedConnector && preferredConnector === walletConnectConnector) {
-      // More helpful than the injected-only message on mobile browsers.
-      toast.info("Opening WalletConnect… choose your wallet app to continue.");
-    } else if (!injectedConnector) {
-      toast.error(NO_INJECTED_WALLET_MESSAGE);
-      return "";
+
+    if (needsInstall) {
+      toast.warn(NO_BITGET_WALLET_MSG);
+      openBitgetInstallPage();
+      if (isMobileWebWithoutBitget()) {
+        toast.info(
+          "After installing Bitget Wallet, approve the connection in the app, then return to Chrome. Tap this message to reopen Bitget.",
+          {
+            autoClose: 15000,
+            onClick: () => {
+              const uri = getLastBitgetWalletConnectUri();
+              if (uri) openBitgetWalletConnectUri(uri);
+            },
+          },
+        );
+      } else {
+        toast.info(
+          "Install the Bitget Wallet extension, refresh this page, then tap Connect Wallet again.",
+          { autoClose: 12000 },
+        );
+      }
+    } else if (isBitgetInAppBrowser()) {
+      toast.info("Connecting with Bitget Wallet…");
     }
 
     let connectedAddress = "";
@@ -173,12 +198,9 @@ export const AuthProvider = ({ children }) => {
       connectedAddress = address;
     } else {
       try {
-        const connectRes = await connectAsync({
-          connector: preferredConnector,
-          chainId: polygon.id,
-        });
-        connectedAddress = connectRes.accounts?.[0] ?? "";
-        connectedChainId = connectRes.chainId;
+        const result = await safeConnect(connectAsync, connector, { handoff });
+        connectedAddress = result.address;
+        connectedChainId = result.chainId;
       } catch (err) {
         console.error("Wallet connection failed:", err);
         const rejected =
@@ -186,18 +208,11 @@ export const AuthProvider = ({ children }) => {
           String(err?.message || "")
             .toLowerCase()
             .includes("rejected");
-        const missingProvider =
-          !hasInjectedProvider &&
-          (String(err?.message || "").toLowerCase().includes("provider") ||
-            String(err?.message || "").toLowerCase().includes("injected") ||
-            String(err?.message || "").toLowerCase().includes("ethereum"));
-        toast.error(
-          rejected
-            ? "Wallet connection was cancelled."
-            : missingProvider
-              ? "No browser wallet detected. On mobile, use WalletConnect or open this site inside your wallet’s in-app browser."
-              : "Failed to connect wallet. Unlock your wallet and try again.",
-        );
+        const mobileWcHint =
+          isMobileWebWithoutBitget()
+            ? "Could not connect to Bitget Wallet. Install the app, then tap Connect again."
+            : "Failed to connect Bitget Wallet. Unlock your wallet and try again.";
+        toast.error(rejected ? "Wallet connection was cancelled." : mobileWcHint);
         return "";
       }
     }
@@ -207,9 +222,12 @@ export const AuthProvider = ({ children }) => {
       return "";
     }
 
-    // WalletConnect on mobile: allow session/chain to sync before sign step.
-    if (isMobileBrowser() && isWalletConnectActive()) {
-      await new Promise((resolve) => setTimeout(resolve, 800));
+    if (!isBitget && isWalletConnectActive()) {
+      await new Promise((resolve) =>
+        setTimeout(resolve, isMobileWebWithoutBitget() ? 2500 : 1200),
+      );
+    } else if (isMobileBrowser()) {
+      await new Promise((resolve) => setTimeout(resolve, 600));
     }
 
     const onPolygon = await requirePolygonNetwork(connectedChainId);
@@ -242,7 +260,7 @@ export const AuthProvider = ({ children }) => {
 
       if (isMobileBrowser() && isWalletConnectActive()) {
         toast.info(
-          "Approve the sign-in message in your wallet app (Polygon network).",
+          "Approve the sign-in message in Bitget Wallet (Polygon network).",
         );
       }
 
