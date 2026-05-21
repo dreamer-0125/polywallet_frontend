@@ -2,7 +2,12 @@ import {
   getBitgetProvider,
   isBitgetProviderAvailable,
 } from "./bitgetWallet.js";
-import { isMobileWebWithoutBitget } from "./walletConnectMobile.js";
+import {
+  isBkcodeDeeplinkMode,
+  isWeb3ModalMode,
+  resolveWalletConnectMode,
+} from "./walletConnectStrategy.js";
+import { CONNECTOR_KEYS } from "../config/wallets.js";
 
 const BITGET_MATCH = /bitget|bitkeep/;
 
@@ -32,59 +37,44 @@ export function hasBitgetWallet() {
 
 export { getBitgetProvider };
 
-export function getWalletConnectConnector(connectors) {
+export function getBkcodeWalletConnectConnector(connectors) {
   return (
-    connectors.find((c) => c.type === "walletConnect") ??
-    connectors.find((c) => normalize(c.id).includes("walletconnect")) ??
-    null
-  );
-}
-
-export function findMetaMaskConnector(connectors) {
-  return (
-    connectors.find((c) => normalize(c.id) === "metamask") ??
+    connectors.find((c) => normalize(c.id) === "walletconnectbkcode") ??
     connectors.find(
-      (c) => c.type === "injected" && normalize(c.name).includes("metamask"),
+      (c) =>
+        c.type === "walletConnect" &&
+        normalize(c.id).includes("bkcode"),
     ) ??
     null
   );
 }
 
-export { isMobileWebWithoutBitget } from "./walletConnectMobile.js";
-
-/** MetaMask, another injected wallet, or WalletConnect — never Bitget. */
-export async function findFallbackConnector(connectors) {
-  const list = connectors ?? [];
-
-  if (isMobileWebWithoutBitget()) {
-    return getWalletConnectConnector(list);
-  }
-
-  const metamask = findMetaMaskConnector(list);
-  if (metamask && (await connectorHasProvider(metamask))) {
-    return metamask;
-  }
-
-  for (const c of list) {
-    if (
-      c.type === "injected" &&
-      !isBitgetConnector(c) &&
-      normalize(c.id) !== "bitget" &&
-      normalize(c.id) !== "injected" &&
-      (await connectorHasProvider(c))
-    ) {
-      return c;
-    }
-  }
-
-  const genericInjected = list.find(
-    (c) => c.type === "injected" && normalize(c.id) === "injected",
+export function getWeb3ModalWalletConnectConnector(connectors) {
+  return (
+    connectors.find((c) => normalize(c.id) === "walletconnectmodal") ??
+    connectors.find(
+      (c) =>
+        c.type === "walletConnect" &&
+        normalize(c.id).includes("modal"),
+    ) ??
+    null
   );
-  if (genericInjected && (await connectorHasProvider(genericInjected))) {
-    return genericInjected;
-  }
+}
 
-  return getWalletConnectConnector(list);
+export function getWalletConnectConnector(connectors, connectorKey) {
+  const mode = resolveWalletConnectMode(connectorKey);
+  if (isBkcodeDeeplinkMode(mode)) {
+    return getBkcodeWalletConnectConnector(connectors);
+  }
+  if (isWeb3ModalMode(mode)) {
+    return getWeb3ModalWalletConnectConnector(connectors);
+  }
+  return (
+    getWeb3ModalWalletConnectConnector(connectors) ??
+    getBkcodeWalletConnectConnector(connectors) ??
+    connectors.find((c) => c.type === "walletConnect") ??
+    null
+  );
 }
 
 async function connectorHasProvider(connector) {
@@ -98,13 +88,12 @@ async function connectorHasProvider(connector) {
 }
 
 /**
- * Prefer Bitget when installed; otherwise return a fallback connector.
- * @returns {Promise<{ connector: import('wagmi').Connector | null, isBitget: boolean }>}
+ * Prefer Bitget injected; otherwise WalletConnect (bkcode or Web3Modal by mode).
  */
-export async function pickWalletConnector(connectors) {
+export async function pickWalletConnector(connectors, connectorKey = CONNECTOR_KEYS.bitget) {
   const list = connectors ?? [];
   const bitgetCandidates = list.filter(
-    (c) => isBitgetConnector(c) || normalize(c.id) === "bitgetwallet",
+    (c) => isBitgetConnector(c) || normalize(c.id) === "bitget",
   );
 
   for (const candidate of bitgetCandidates) {
@@ -114,16 +103,14 @@ export async function pickWalletConnector(connectors) {
   }
 
   if (hasBitgetWallet()) {
-    const configured =
-      list.find((c) => normalize(c.id) === "bitget") ??
-      list.find((c) => normalize(c.id) === "bitgetwallet");
+    const configured = list.find((c) => normalize(c.id) === "bitget");
     if (configured) {
       return { connector: configured, isBitget: true };
     }
   }
 
-  return {
-    connector: await findFallbackConnector(list),
-    isBitget: false,
-  };
+  const wc = getWalletConnectConnector(list, connectorKey);
+  return { connector: wc, isBitget: false };
 }
+
+export { isMobileWebWithoutBitget } from "./walletConnectMobile.js";

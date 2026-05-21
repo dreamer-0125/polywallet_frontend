@@ -30,14 +30,19 @@ import {
   safeConnect,
   resolveConnector,
   resolvePreferredConnector,
+  resolveWalletConnectMode,
   NO_BITGET_WALLET_MSG,
 } from "../utils/walletConnection.js";
 import {
   createBitgetWalletConnectHandoff,
   getLastBitgetWalletConnectUri,
   isMobileWebWithoutBitget,
-  openBitgetWalletConnectUri,
+  openBkcodeWalletConnectUri,
 } from "../utils/walletConnectMobile.js";
+import {
+  isBkcodeDeeplinkMode,
+  WALLET_CONNECT_MODE,
+} from "../utils/walletConnectStrategy.js";
 import { clearAuthToken } from "../utils/authToken.js";
 import { CONNECTOR_KEYS } from "../config/wallets.js";
 import { hydrateUser } from "../utils/userDisplay.js";
@@ -192,43 +197,43 @@ export const AuthProvider = ({ children }) => {
   const connectWallet = async (connectorKey = CONNECTOR_KEYS.bitget) => {
     let connector = null;
     let usedBitget = false;
-    const useMobileWalletConnect =
-      isMobileWebWithoutBitget() &&
-      (connectorKey === CONNECTOR_KEYS.bitget ||
-        connectorKey === CONNECTOR_KEYS.walletConnect);
-    const handoff = useMobileWalletConnect
-      ? createBitgetWalletConnectHandoff()
-      : null;
+    const wcMode = resolveWalletConnectMode(connectorKey);
+    const useBkcodeCase = isBkcodeDeeplinkMode(wcMode);
+    const handoff = useBkcodeCase ? createBitgetWalletConnectHandoff() : null;
 
     if (connectorKey === CONNECTOR_KEYS.bitget) {
-      const picked = await resolvePreferredConnector(connectors);
+      const picked = await resolvePreferredConnector(connectors, connectorKey);
       connector = picked.connector;
       usedBitget = picked.isBitget;
       if (!usedBitget) {
         toast.warn(NO_BITGET_WALLET_MSG);
-        if (isMobileWebWithoutBitget()) {
+        if (useBkcodeCase) {
           toast.info(
-            "Opening Bitget Wallet — approve the connection request in the app, then return to Chrome.",
+            "Opening Bitget via bkcode.vip — approve in the app, then return to Chrome.",
             {
               autoClose: 15000,
               onClick: () => {
                 const uri = getLastBitgetWalletConnectUri();
-                if (uri) openBitgetWalletConnectUri(uri);
+                if (uri) openBkcodeWalletConnectUri(uri);
               },
             },
           );
+        } else if (wcMode === WALLET_CONNECT_MODE.WEB3MODAL) {
+          toast.info("Choose Bitget Wallet in the connection modal.");
         }
       }
     } else {
       connector = resolveConnector(connectors, connectorKey);
-      if (useMobileWalletConnect && connector?.type === "walletConnect") {
+      if (wcMode === WALLET_CONNECT_MODE.WEB3MODAL) {
+        toast.info("Choose your wallet in the Web3Modal window.");
+      } else if (useBkcodeCase) {
         toast.info(
-          "Opening Bitget Wallet — approve the connection request in the app, then return to Chrome.",
+          "Opening Bitget via bkcode.vip — approve in the app, then return to Chrome.",
           {
             autoClose: 15000,
             onClick: () => {
               const uri = getLastBitgetWalletConnectUri();
-              if (uri) openBitgetWalletConnectUri(uri);
+              if (uri) openBkcodeWalletConnectUri(uri);
             },
           },
         );
@@ -248,7 +253,11 @@ export const AuthProvider = ({ children }) => {
     let connectedChainId = chainId;
 
     try {
-      const result = await safeConnect(connectAsync, connector, { handoff });
+      const result = await safeConnect(connectAsync, connector, {
+        handoff,
+        connectorKey,
+        wcMode,
+      });
       connectedAddress = result.address;
       connectedChainId = result.chainId;
     } catch (err) {
@@ -258,9 +267,10 @@ export const AuthProvider = ({ children }) => {
         String(err?.message || "")
           .toLowerCase()
           .includes("rejected");
-      const mobileWcHint =
-        isWalletConnect && isMobileWebWithoutBitget()
-          ? "Could not open WalletConnect. Try again and pick Bitget Wallet from the wallet list."
+      const mobileWcHint = useBkcodeCase
+        ? "Could not open Bitget via bkcode.vip. Install Bitget Wallet and try again."
+        : isWalletConnect
+          ? "Connection failed. Try again from the Web3Modal wallet list."
           : "Failed to connect wallet. Unlock your wallet and try again.";
       toast.error(rejected ? "Wallet connection was cancelled." : mobileWcHint);
       return "";

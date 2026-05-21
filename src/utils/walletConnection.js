@@ -3,11 +3,22 @@ import { polygon } from "wagmi/chains";
 import { config } from "../config/index.js";
 import { isMobileBrowser } from "./device.js";
 import { isBitgetProviderAvailable } from "./bitgetWallet.js";
-import { pickWalletConnector } from "./walletConnectors.js";
 import {
-  bindBitgetWalletConnectUriRelay,
+  getBkcodeWalletConnectConnector,
+  getWeb3ModalWalletConnectConnector,
+  pickWalletConnector,
+} from "./walletConnectors.js";
+import {
+  bindBkcodeWalletConnectUriRelay,
   isMobileWebWithoutBitget,
 } from "./walletConnectMobile.js";
+import {
+  isBkcodeDeeplinkMode,
+  isWeb3ModalMode,
+  resolveWalletConnectMode,
+  WALLET_CONNECT_MODE,
+} from "./walletConnectStrategy.js";
+import { connectViaWeb3Modal } from "./web3ModalConnect.js";
 import { CONNECTOR_KEYS } from "../config/wallets.js";
 
 function sleep(ms) {
@@ -17,15 +28,10 @@ function sleep(ms) {
 }
 
 function isWalletConnectConnector(connector) {
-  return (
-    connector?.type === "walletConnect" ||
-    String(connector?.id || "").toLowerCase().includes("walletconnect")
-  );
+  const id = String(connector?.id || "").toLowerCase();
+  return connector?.type === "walletConnect" || id.includes("walletconnect");
 }
 
-/**
- * Mobile Safari/Chrome: user approves WC in the wallet app after returning to the tab.
- */
 async function waitForMobileWalletConnectAccount(timeoutMs = 90_000) {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
@@ -49,6 +55,13 @@ async function waitForMobileWalletConnectAccount(timeoutMs = 90_000) {
   return null;
 }
 
+function isUserRejectedConnectError(error) {
+  const code = error?.code ?? error?.cause?.code;
+  if (code === 4001) return true;
+  const msg = String(error?.message || "").toLowerCase();
+  return msg.includes("rejected") || msg.includes("denied") || msg.includes("cancel");
+}
+
 export const NO_BITGET_WALLET_MSG = "No bitget wallet";
 
 export function isConnectorAlreadyConnectedError(error) {
@@ -62,13 +75,18 @@ export function isConnectorAlreadyConnectedError(error) {
 }
 
 /**
- * Connect with the chosen connector. Reconnects if another wallet was active.
- */
-/**
  * @param {import('wagmi').Connector} connector
- * @param {{ handoff?: { window: Window } | null }} [options]
+ * @param {{
+ *   handoff?: { window: Window } | null;
+ *   connectorKey?: string;
+ *   wcMode?: string | null;
+ * }} [options]
  */
 export async function safeConnect(connectAsync, connector, options = {}) {
+  const connectorKey = options.connectorKey ?? CONNECTOR_KEYS.bitget;
+  const wcMode =
+    options.wcMode ?? resolveWalletConnectMode(connectorKey);
+
   const existing = getAccount(config);
   const current = config.state.connections.get(config.state.current);
   const currentId = current?.connector?.id;
@@ -97,11 +115,22 @@ export async function safeConnect(connectAsync, connector, options = {}) {
   }
 
   const isWalletConnect = isWalletConnectConnector(connector);
-  const isMobileWeb = isMobileWebWithoutBitget();
+
+  if (isWalletConnect && isWeb3ModalMode(wcMode)) {
+    try {
+      return await connectViaWeb3Modal(connectAsync, connector);
+    } catch (err) {
+      if (isUserRejectedConnectError(err)) throw err;
+      throw err;
+    }
+  }
+
+  const isBkcodeCase =
+    isWalletConnect && isBkcodeDeeplinkMode(wcMode) && isMobileWebWithoutBitget();
 
   let unbindUriRelay = () => {};
-  if (isWalletConnect && isMobileWeb) {
-    unbindUriRelay = await bindBitgetWalletConnectUriRelay(connector, {
+  if (isBkcodeCase) {
+    unbindUriRelay = await bindBkcodeWalletConnectUriRelay(connector, {
       handoff: options.handoff ?? null,
     });
   }
@@ -128,8 +157,7 @@ export async function safeConnect(connectAsync, connector, options = {}) {
       }
     }
 
-    // User switched to wallet app before approving — wait for session when they return.
-    if (isWalletConnect && isMobileWeb) {
+    if (isBkcodeCase) {
       const recovered = await waitForMobileWalletConnectAccount();
       if (recovered?.address) {
         return recovered;
@@ -144,7 +172,7 @@ export async function safeConnect(connectAsync, connector, options = {}) {
 
     throw err;
   } finally {
-    if (isWalletConnect && isMobileWeb) {
+    if (isBkcodeCase) {
       setTimeout(unbindUriRelay, 120_000);
     } else {
       unbindUriRelay();
@@ -152,40 +180,25 @@ export async function safeConnect(connectAsync, connector, options = {}) {
   }
 }
 
-function isUserRejectedConnectError(error) {
-  const code = error?.code ?? error?.cause?.code;
-  if (code === 4001) return true;
-  const msg = String(error?.message || "").toLowerCase();
-  return msg.includes("rejected") || msg.includes("denied") || msg.includes("cancel");
-}
-
-/**
- * Landing / default connect: Bitget when installed, else MetaMask → injected → WalletConnect.
- * @returns {Promise<{ connector: import('wagmi').Connector | null, isBitget: boolean }>}
- */
-export async function resolvePreferredConnector(connectors) {
-  const picked = await pickWalletConnector(connectors ?? []);
-  return picked;
+export async function resolvePreferredConnector(connectors, connectorKey) {
+  return pickWalletConnector(connectors ?? [], connectorKey);
 }
 
 export function resolveConnector(connectors, key) {
   if (!connectors?.length) return null;
 
   if (key === CONNECTOR_KEYS.bitget) {
-    return (
-      connectors.find((c) => String(c.id).toLowerCase().includes("bitget")) ??
-      null
+    const bitgetInjected = connectors.find(
+      (c) =>
+        c.type === "injected" &&
+        String(c.id).toLowerCase().includes("bitget"),
     );
+    if (bitgetInjected) return bitgetInjected;
+    return getBkcodeWalletConnectConnector(connectors);
   }
 
   if (key === CONNECTOR_KEYS.walletConnect) {
-    return (
-      connectors.find((c) => c.type === "walletConnect") ??
-      connectors.find((c) =>
-        String(c.id).toLowerCase().includes("walletconnect"),
-      ) ??
-      null
-    );
+    return getWeb3ModalWalletConnectConnector(connectors);
   }
 
   if (key === CONNECTOR_KEYS.injected) {
@@ -206,15 +219,13 @@ export function resolveConnector(connectors, key) {
 export function isBitgetConnectorActive() {
   const connection = config.state.connections.get(config.state.current);
   const id = String(connection?.connector?.id || "").toLowerCase();
-  if (id.includes("bitget")) return true;
+  if (id.includes("bitget") || id.includes("bitkeep")) return true;
   return isBitgetProviderAvailable() && !!getAccount(config).address;
 }
 
-export function shouldWarnNonBitget(connectorKey) {
-  return connectorKey !== CONNECTOR_KEYS.bitget;
-}
+export { resolveWalletConnectMode, WALLET_CONNECT_MODE };
 
-/** Two options only: Bitget (when available) + WalletConnect. */
+/** Wallet picker entries for Landing / modals. */
 export function listWalletOptions() {
   const hasBitget = isBitgetProviderAvailable();
   const options = [];
@@ -223,16 +234,44 @@ export function listWalletOptions() {
     options.push({
       key: CONNECTOR_KEYS.bitget,
       title: "Bitget Wallet",
-      subtitle: "Recommended",
+      subtitle: "Extension or in-app browser",
       recommended: true,
+      mode: null,
     });
+    return options;
+  }
+
+  if (isMobileWebWithoutBitget()) {
+    options.push({
+      key: CONNECTOR_KEYS.bitget,
+      title: "Bitget Wallet",
+      subtitle: "Open app via bkcode.vip (recommended)",
+      recommended: true,
+      mode: WALLET_CONNECT_MODE.BKCODE_DEEPLINK,
+    });
+    options.push({
+      key: CONNECTOR_KEYS.walletConnect,
+      title: "Connect in browser",
+      subtitle: "Web3Modal — QR or wallet list",
+      recommended: false,
+      mode: WALLET_CONNECT_MODE.WEB3MODAL,
+    });
+    return options;
   }
 
   options.push({
+    key: CONNECTOR_KEYS.bitget,
+    title: "Bitget Wallet",
+    subtitle: "Install extension, then connect",
+    recommended: true,
+    mode: WALLET_CONNECT_MODE.WEB3MODAL,
+  });
+  options.push({
     key: CONNECTOR_KEYS.walletConnect,
     title: "WalletConnect",
-    subtitle: "Bitget, Trust Wallet, or MetaMask",
-    recommended: !hasBitget,
+    subtitle: "Web3Modal — other wallets",
+    recommended: false,
+    mode: WALLET_CONNECT_MODE.WEB3MODAL,
   });
 
   return options;
