@@ -24,7 +24,14 @@ import {
   NO_POLYGON_CHAIN_MESSAGE,
   WRONG_NETWORK_MESSAGE,
 } from "../utils/polygonChain";
-import { pickWalletConnector } from "../utils/walletConnectors";
+import {
+  safeConnect,
+  resolveConnector,
+  shouldWarnNonBitget,
+  isBitgetConnectorActive,
+} from "../utils/walletConnection.js";
+import { CONNECTOR_KEYS, NON_BITGET_WARNING_MSG } from "../config/wallets.js";
+import { hydrateUser } from "../utils/userDisplay.js";
 import {
   getSignErrorMessage,
   isMobileBrowser,
@@ -55,6 +62,8 @@ export const AuthProvider = ({ children }) => {
   const connectors = useConnectors();
   const wrongChainNotifiedRef = useRef(null);
   const refreshInFlightRef = useRef(null);
+  const mismatchCheckTimerRef = useRef(null);
+  const nonBitgetWarnedRef = useRef(false);
 
   const isAuthenticated = !!user?.id;
 
@@ -65,12 +74,11 @@ export const AuthProvider = ({ children }) => {
         const res = await fetchAuthSession();
         if (cancelled) return;
         if (res?.success && res.user) {
-          setUser(res.user);
-          // Immediately fetch full user data (with transactions) without waiting for 30s poll
+          setUser(hydrateUser(res.user));
           try {
             const meRes = await fetchMe();
             if (!cancelled && meRes?.success && meRes.user) {
-              setUser(meRes.user);
+              setUser(hydrateUser(meRes.user));
             }
           } catch {
             /* ignore — session data already set above */
@@ -89,6 +97,7 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     const handleUnauthorized = () => {
+      toast.info("Please sign in again with your wallet.");
       setUser(null);
       logoutApi().catch(() => {});
     };
@@ -96,19 +105,42 @@ export const AuthProvider = ({ children }) => {
     return () => window.removeEventListener("auth:unauthorized", handleUnauthorized);
   }, []);
 
+  // Only log out on a stable wallet mismatch — not during WC reconnect flicker (common on mobile).
   useEffect(() => {
-    if (!sessionChecked || !user?.walletAddress || !address || !isConnected) return;
-    const timer = setTimeout(() => {
-      if (user.walletAddress.toLowerCase() !== address.toLowerCase()) {
+    if (mismatchCheckTimerRef.current) {
+      clearTimeout(mismatchCheckTimerRef.current);
+      mismatchCheckTimerRef.current = null;
+    }
+
+    if (!sessionChecked || !user?.walletAddress || !address || !isConnected) {
+      return undefined;
+    }
+
+    // WalletConnect reconnects often flicker address/chain on mobile — skip mismatch logout.
+    if (isWalletConnectActive()) {
+      return undefined;
+    }
+
+    mismatchCheckTimerRef.current = setTimeout(() => {
+      const sessionAddr = user.walletAddress?.toLowerCase();
+      const liveAddr = address?.toLowerCase();
+      if (!sessionAddr || !liveAddr) return;
+      if (sessionAddr !== liveAddr) {
         toast.warn(
           "Connected wallet does not match your PolyWallet account. Sign in with the correct wallet.",
         );
         setUser(null);
         logoutApi().catch(() => {});
       }
-    }, 2000);
-    return () => clearTimeout(timer);
-  }, [sessionChecked, user, address, isConnected]);
+    }, 8000);
+
+    return () => {
+      if (mismatchCheckTimerRef.current) {
+        clearTimeout(mismatchCheckTimerRef.current);
+        mismatchCheckTimerRef.current = null;
+      }
+    };
+  }, [sessionChecked, user?.walletAddress, address, isConnected]);
 
   useEffect(() => {
     if (!isConnected) return;
@@ -139,61 +171,44 @@ export const AuthProvider = ({ children }) => {
     return result.ok;
   };
 
-  const connectWallet = async () => {
-    const hasInjectedProvider =
-      typeof window !== "undefined" && !!window.ethereum?.request;
-
-    const { connector: preferredConnector, isBitget } =
-      await pickWalletConnector(connectors);
-
-    if (!preferredConnector) {
-      toast.error(
-        "No wallet connector available. Install Bitget Wallet, MetaMask, or use WalletConnect.",
-      );
+  /**
+   * @param {string} [connectorKey] — CONNECTOR_KEYS.bitget | injected | walletConnect
+   */
+  const connectWallet = async (connectorKey = CONNECTOR_KEYS.bitget) => {
+    const connector = resolveConnector(connectors, connectorKey);
+    if (!connector) {
+      toast.error("This wallet option is not available in your browser.");
       return "";
     }
 
-    if (!isBitget) {
-      toast.warn("install bitget wallet");
-      if (preferredConnector.type === "walletConnect") {
-        toast.info("Opening WalletConnect… choose your wallet app to continue.");
-      }
+    const isWalletConnect =
+      connectorKey === CONNECTOR_KEYS.walletConnect ||
+      connector.type === "walletConnect";
+
+    if (isWalletConnect) {
+      toast.info("Opening WalletConnect…");
     }
 
     let connectedAddress = "";
     let connectedChainId = chainId;
 
-    if (isConnected && address) {
-      connectedAddress = address;
-    } else {
-      try {
-        const connectRes = await connectAsync({
-          connector: preferredConnector,
-          chainId: polygon.id,
-        });
-        connectedAddress = connectRes.accounts?.[0] ?? "";
-        connectedChainId = connectRes.chainId;
-      } catch (err) {
-        console.error("Wallet connection failed:", err);
-        const rejected =
-          err?.code === 4001 ||
-          String(err?.message || "")
-            .toLowerCase()
-            .includes("rejected");
-        const missingProvider =
-          !hasInjectedProvider &&
-          (String(err?.message || "").toLowerCase().includes("provider") ||
-            String(err?.message || "").toLowerCase().includes("injected") ||
-            String(err?.message || "").toLowerCase().includes("ethereum"));
-        toast.error(
-          rejected
-            ? "Wallet connection was cancelled."
-            : missingProvider
-              ? "No browser wallet detected. On mobile, use WalletConnect or open this site inside your wallet’s in-app browser."
-              : "Failed to connect wallet. Unlock your wallet and try again.",
-        );
-        return "";
-      }
+    try {
+      const result = await safeConnect(connectAsync, connector);
+      connectedAddress = result.address;
+      connectedChainId = result.chainId;
+    } catch (err) {
+      console.error("Wallet connection failed:", err);
+      const rejected =
+        err?.code === 4001 ||
+        String(err?.message || "")
+          .toLowerCase()
+          .includes("rejected");
+      toast.error(
+        rejected
+          ? "Wallet connection was cancelled."
+          : "Failed to connect wallet. Unlock your wallet and try again.",
+      );
+      return "";
     }
 
     if (!connectedAddress) {
@@ -201,12 +216,28 @@ export const AuthProvider = ({ children }) => {
       return "";
     }
 
-    // WalletConnect on mobile: allow session/chain to sync before sign step.
-    if (isMobileBrowser() && isWalletConnectActive()) {
-      await new Promise((resolve) => setTimeout(resolve, 800));
+    if (
+      shouldWarnNonBitget(connectorKey) &&
+      !isBitgetConnectorActive() &&
+      connectorKey === CONNECTOR_KEYS.walletConnect
+    ) {
+      if (!nonBitgetWarnedRef.current) {
+        nonBitgetWarnedRef.current = true;
+        toast.warn(NON_BITGET_WARNING_MSG, { autoClose: 6000 });
+      }
     }
 
-    const onPolygon = await requirePolygonNetwork(connectedChainId);
+    if (isWalletConnect) {
+      await new Promise((resolve) => setTimeout(resolve, 1200));
+    } else if (isMobileBrowser()) {
+      await new Promise((resolve) => setTimeout(resolve, 600));
+    }
+
+    let onPolygon = await requirePolygonNetwork(connectedChainId);
+    if (!onPolygon && isWalletConnect) {
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      onPolygon = await requirePolygonNetwork();
+    }
     if (!onPolygon) {
       return "";
     }
@@ -260,10 +291,19 @@ export const AuthProvider = ({ children }) => {
       }
 
       if (verifyRes.user) {
-        setUser(verifyRes.user);
+        setUser(hydrateUser(verifyRes.user));
       } else {
         const userRes = await findUser(walletAddress);
-        if (userRes?.user) setUser(userRes.user);
+        if (userRes?.user) setUser(hydrateUser(userRes.user));
+      }
+
+      try {
+        const sessionRes = await fetchAuthSession();
+        if (sessionRes?.success && sessionRes.user) {
+          setUser(hydrateUser(sessionRes.user));
+        }
+      } catch {
+        /* verify already set user */
       }
 
       return true;
@@ -283,13 +323,19 @@ export const AuthProvider = ({ children }) => {
     }
 
     try {
-      const referCode = referralInput || referralCode || "000000";
+      const referCode = String(referralInput || referralCode || "")
+        .trim()
+        .toUpperCase();
+      if (!/^[A-Z0-9]{6}$/.test(referCode)) {
+        toast.error("A valid 6-character referral code is required");
+        return false;
+      }
       const walletID = polyWalletID || address.slice(2, 12);
 
       const response = await createUser(address, referCode, walletID);
 
       if (response.user) {
-        setUser(response.user);
+        setUser(hydrateUser(response.user));
         return true;
       } else {
         toast.warn(response.message || "Registration failed");
@@ -311,8 +357,8 @@ export const AuthProvider = ({ children }) => {
       try {
         const res = await fetchMe();
         if (res?.success && res.user) {
-          setUser(res.user);
-          return res.user;
+          setUser(hydrateUser(res.user));
+          return hydrateUser(res.user);
         }
       } catch (err) {
         const status = err?.response?.status;
@@ -323,8 +369,9 @@ export const AuthProvider = ({ children }) => {
           try {
             const res = await fetchAuthSession();
             if (res?.success && res.user) {
-              setUser((prev) => (prev ? { ...prev, ...res.user } : res.user));
-              return res.user;
+              const hydrated = hydrateUser(res.user);
+              setUser((prev) => (prev ? { ...prev, ...hydrated } : hydrated));
+              return hydrated;
             }
           } catch {
             /* ignore */

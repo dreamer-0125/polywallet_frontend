@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import React, { useEffect, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   User,
   QrCode,
@@ -17,14 +17,24 @@ import { toast } from "react-toastify";
 
 export default function Register() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { address } = useAccount();
-  const { registerUser, user, setUser, referralCode } = useAuth();
+  const { registerUser, user, setUser, referralCode, setReferralCode } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState({
     userId: "",
     referralCode: referralCode,
   });
   const [errors, setErrors] = useState({ userId: "", referralCode: "" });
+
+  useEffect(() => {
+    const ref = searchParams.get("ref");
+    if (ref) {
+      const normalized = ref.trim().toUpperCase().slice(0, 6);
+      setReferralCode(normalized);
+      setFormData((prev) => ({ ...prev, referralCode: normalized }));
+    }
+  }, [searchParams, setReferralCode]);
 
   const handleUserIdChange = (e) => {
     const val = e.target.value;
@@ -81,7 +91,10 @@ export default function Register() {
       formData.userId.length < 3
         ? "Minimum 3 characters required"
         : errors.userId;
-    const referralError = errors.referralCode;
+    const referralError =
+      formData.referralCode.length !== 6
+        ? "Referral Code must be exactly 6 characters"
+        : errors.referralCode;
 
     if (userIdError || referralError) {
       setErrors({ userId: userIdError, referralCode: referralError });

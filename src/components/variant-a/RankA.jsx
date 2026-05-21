@@ -10,6 +10,7 @@ import { rankMeta } from "../../config/data.config";
 import { useWalletConfig, formatRatePercent } from "../../context/WalletConfigContext";
 import { getReferralData } from "../../api";
 import TeamTreeUI from "../shared/teamStructure";
+import { toast } from "react-toastify";
 export default function RankA() {
   const { t } = useLocale();
   const [showQr, setShowQr] = useState(false);
@@ -18,7 +19,7 @@ export default function RankA() {
   const { setLoading } = useLoadingContext();
   const [teamStructure, setTeamStructure] = useState({});
 
-  const referralLink = `${window.origin}?ref=${user.referralCode}`;
+  const referralLink = `${window.origin}/register?ref=${user.referralCode}`;
   const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(referralLink)}`;
 
   const rankKey = user?.rank ?? "";
@@ -42,8 +43,13 @@ export default function RankA() {
       if (response?.teamStructure) {
         setTeamStructure(response.teamStructure);
       }
-    } catch {
-      /* session expired — auth:unauthorized event will handle redirect */
+    } catch (err) {
+      const status = err?.response?.status;
+      if (status === 401 || status === 403) {
+        /* auth:unauthorized → redirect home */
+      } else if (!err?.response) {
+        toast.warn("Could not load team data. Check your connection and try again.");
+      }
     } finally {
       setLoading(false);
     }

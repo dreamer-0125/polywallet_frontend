@@ -18,13 +18,18 @@ import {
 import Logo from "../../assets/LOGO-black.svg";
 import { useLoadingContext } from "../../context/LoadingContext";
 import { useAuth } from "../../context/AuthContext";
+import { hydrateUser } from "../../utils/userDisplay";
 import { formatRatePercent } from "../../context/WalletConfigContext";
 import {
-  deposit,
   lookupRecipientByPolyWalletId,
   sendBalance,
   withdraw,
 } from "../../api";
+import {
+  submitDepositWithRetry,
+  syncPendingDepositIfAny,
+  loadPendingDeposit,
+} from "../../utils/depositFlow.js";
 import { toast } from "react-toastify";
 import { format } from "date-fns";
 import { POLYGON_USDC } from "../../config";
@@ -58,12 +63,16 @@ export default function WalletA() {
 
   const applyDepositSuccess = async (response) => {
     if (response?.user) {
-      setUser((prev) =>
-        prev ? { ...prev, ...response.user } : response.user,
-      );
+      const hydrated = hydrateUser(response.user);
+      setUser((prev) => (prev ? { ...prev, ...hydrated } : hydrated));
     }
     await refreshUser();
   };
+
+  useEffect(() => {
+    if (!user?.id) return;
+    refreshUser();
+  }, [user?.id, refreshUser]);
   const { address } = useAccount();
   const { data: rawUsdcBalance } = useReadContract({
     address: POLYGON_USDC,
@@ -82,7 +91,25 @@ export default function WalletA() {
   const [walletID, setWalletID] = useState("");
   const recipientLookupTimer = useRef(null);
   const interestApyLabel = formatRatePercent(user?.rates?.balanceInterestApy);
-  const commissionLabel = formatRatePercent(user?.rates?.bonusRate);
+  const [pendingDeposit, setPendingDeposit] = useState(null);
+
+  useEffect(() => {
+    setPendingDeposit(loadPendingDeposit());
+  }, [activeModal]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    const pending = loadPendingDeposit();
+    if (!pending?.txHash) return;
+    (async () => {
+      const result = await syncPendingDepositIfAny();
+      if (result?.ok) {
+        toast.success("Pending deposit credited to your balance");
+        await applyDepositSuccess(result.response);
+        setPendingDeposit(null);
+      }
+    })();
+  }, [user?.id]);
 
   // Responsive Guard: Redirect to Desktop if screen grows (>= 768px)
   useEffect(() => {
@@ -195,28 +222,33 @@ export default function WalletA() {
           return;
         }
 
-        let response;
+        let result;
         try {
-          response = await deposit(numericAmount, txHash);
+          result = await submitDepositWithRetry(numericAmount, txHash);
         } catch (apiErr) {
           const msg =
             apiErr?.response?.data?.message ||
-            "Deposit could not be credited. Your USDC transfer may still have succeeded — contact support with your tx hash.";
+            "Deposit could not be credited. Your USDC transfer may still have succeeded — use Sync deposit below.";
           toast.error(msg);
+          setPendingDeposit(loadPendingDeposit());
           setLoading(false);
           return;
         }
 
-        if (response?.depositRequest?.status === "approved") {
-          toast.success(response.message || "Deposit successful");
-          await applyDepositSuccess(response);
-        } else if (response?.depositRequest) {
-          toast.success(response.message || "Deposit submitted");
-          await applyDepositSuccess(response);
+        if (result.ok) {
+          toast.success(result.response?.message || "Deposit successful");
+          await applyDepositSuccess(result.response);
+          setPendingDeposit(null);
+          closeModal();
+        } else if (result.pending) {
+          toast.warn(
+            result.response?.message ||
+              "Transfer detected on-chain. Tap Sync deposit in a few seconds.",
+          );
+          setPendingDeposit(loadPendingDeposit());
         } else {
-          toast.warn(response?.message || "Deposit failed");
+          toast.warn(result.response?.message || "Deposit failed");
         }
-        closeModal();
       } else if (activeModal === "withdraw") {
         const numericAmount = Number(amount);
         if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
@@ -326,18 +358,15 @@ export default function WalletA() {
               </div>
               <div className="min-w-0 overflow-hidden rounded-2xl border border-gray-300 bg-white px-2.5 py-3 sm:px-4 sm:py-[15px]">
                 <p className="truncate text-[9px] font-bold uppercase tracking-wider text-gray-500 sm:text-[10px]">
-                  {t("totalBonus", "Total Bonus")}
+                  {t("totalBonus", "Affiliate Bonus")}
                 </p>
                 <p className="mt-2 text-xl font-black text-gray-900 sm:mt-3 sm:text-[26px]">
                   ${formatAmount(user.bonus)}
                 </p>
                 <div className="mt-2 flex min-w-0 flex-col gap-1">
                   <p className="truncate text-[11px] font-bold text-blue-600 sm:text-[12px]">
-                    + ${formatAmount(user.dailyBonus)}
+                    + ${formatAmount(user.dailyBonus)} {t("today", "today")}
                   </p>
-                  <span className="w-fit max-w-full truncate rounded border border-gray-200 bg-gray-50 px-1.5 py-0.5 text-[10px] font-bold text-gray-500">
-                    {commissionLabel}
-                  </span>
                 </div>
               </div>
             </div>
@@ -485,8 +514,35 @@ export default function WalletA() {
                           {formatAmount(walletUsdcBalance)} USDC (Polygon)
                         </span>
                       </p>
+                      {pendingDeposit?.txHash && (
+                        <button
+                          type="button"
+                          className="w-full text-sm font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-xl py-3 px-4"
+                          onClick={async () => {
+                            setLoading(true);
+                            try {
+                              const result = await syncPendingDepositIfAny();
+                              if (result?.ok) {
+                                toast.success("Deposit synced to your balance");
+                                await applyDepositSuccess(result.response);
+                                setPendingDeposit(null);
+                                closeModal();
+                              } else {
+                                toast.warn(
+                                  result?.response?.message ||
+                                    "Still waiting for Polygon confirmation. Try again shortly.",
+                                );
+                              }
+                            } finally {
+                              setLoading(false);
+                            }
+                          }}
+                        >
+                          Sync pending deposit
+                        </button>
+                      )}
                     </div>
-                    
+
                     <button
                       onClick={handleAction}
                       className="w-full py-4 bg-blue-600 text-white rounded-[20px] font-bold text-lg shadow-lg hover:bg-blue-700 active:scale-[0.98] transition-all"

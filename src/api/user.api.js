@@ -70,16 +70,11 @@ export const getAirdrop = async () => {
 };
 
 export const deposit = async (amount, txHash) => {
-  try {
-    const response = await apiClient.post("/user/deposit", {
-      amount,
-      txHash,
-    });
-    return response.data;
-  } catch (error) {
-    console.error("deposit error:", error);
-    throw error;
-  }
+  const response = await apiClient.post("/user/deposit", {
+    amount,
+    txHash,
+  });
+  return response.data;
 };
 
 export const withdraw = async (amount) => {

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useMemo } from "react";
 import LayoutADesktop from "./LayoutADesktop";
 import HeaderActionsA from "../variant-a/HeaderActionsA";
 import {
@@ -12,37 +12,11 @@ import {
   Gift,
 } from "lucide-react";
 import { useLocale } from "../../i18n";
-import { getNftData, nftMint } from "../../api";
-import { toast } from "react-toastify";
-import { useLoadingContext } from "../../context/LoadingContext";
-import { useAuth } from "../../context/AuthContext";
 import { useWalletConfig, formatRatePercent } from "../../context/WalletConfigContext";
-
-const DEFAULT_NFT_DATA = {
-  nftPrice: 1000,
-  mintedNfts: 0,
-  nftLimited: 1000,
-  remainingNfts: 1000,
-  nftSeries: "Genesis",
-  nftName: "Genesis Cube",
-  nftEdition: 1,
-  nftDescription:
-    "A limited edition collectible granting holders lifetime privileges across the PolyWallet ecosystem.",
-};
-
-function formatSupply(amount) {
-  const n = Number(amount);
-  if (!Number.isFinite(n)) return "—";
-  if (n >= 1_000_000) {
-    const m = n / 1_000_000;
-    return `${m % 1 === 0 ? m : m.toFixed(1)}M`;
-  }
-  if (n >= 1_000) {
-    const k = n / 1_000;
-    return `${k % 1 === 0 ? k : k.toFixed(1)}K`;
-  }
-  return n.toLocaleString("en-US");
-}
+import NftStatsRow from "../nft/NftStatsRow";
+import NftCollectionTitle from "../nft/NftCollectionTitle";
+import NftMintPriceCard from "../nft/NftMintPriceCard";
+import { useNftCollection } from "../../hooks/useNftCollection";
 
 function NftHeroVisual() {
   return (
@@ -65,8 +39,6 @@ function NftHeroVisual() {
 
 export default function NFTADesktop() {
   const { t } = useLocale();
-  const { setLoading } = useLoadingContext();
-  const { user, setUser, refreshUser } = useAuth();
   const { balanceInterestApy, maxPointApy } = useWalletConfig();
   const privileges = useMemo(
     () => [
@@ -97,89 +69,22 @@ export default function NFTADesktop() {
     ],
     [balanceInterestApy, maxPointApy]
   );
-  const [showMintModal, setShowMintModal] = useState(false);
-  const [quantity, setQuantity] = useState(1);
-  const [nftData, setNftData] = useState({});
-
-  const displayNftData = { ...DEFAULT_NFT_DATA, ...nftData };
-  const ownedCount = Number(user?.nftAmount ?? 0);
-  const rankLabel = user?.rank || "—";
-  const remainingNfts =
-    displayNftData.remainingNfts ??
-    Math.max(0, Number(displayNftData.nftLimited) - Number(displayNftData.mintedNfts));
-  const supplyLabel = remainingNfts.toLocaleString("en-US");
-  const mintedDisplay = displayNftData.mintedNfts.toLocaleString("en-US");
-  const limitedDisplay = displayNftData.nftLimited.toLocaleString("en-US");
-  const limitedShort = formatSupply(displayNftData.nftLimited);
-  const heroMintLabel = `${displayNftData.mintedNfts.toLocaleString("en-US")} / ${limitedShort}`;
-  const mintProgress =
-    displayNftData.nftLimited > 0
-      ? Math.min(
-          100,
-          (displayNftData.mintedNfts / displayNftData.nftLimited) * 100,
-        )
-      : 0;
-
-  const loadNftData = useCallback(async () => {
-    try {
-      const response = await getNftData();
-      if (response?.nftData) {
-        setNftData(response.nftData);
-      }
-    } catch {
-      /* ignore */
-    }
-  }, []);
-
-  const init = useCallback(async () => {
-    if (!user?.id) return;
-    setLoading(true);
-    await loadNftData();
-    setLoading(false);
-  }, [user?.id, setLoading, loadNftData]);
-
-  useEffect(() => {
-    init();
-  }, [init]);
-
-  useEffect(() => {
-    if (!user?.id) return;
-    const id = setInterval(loadNftData, 30_000);
-    return () => clearInterval(id);
-  }, [user?.id, loadNftData]);
-
-  const handleNftMint = async () => {
-    const numericQuantity = Number(quantity);
-    const amount = displayNftData.nftPrice * numericQuantity;
-    if (amount > Number(user.polyBalance)) {
-      toast.info("Your Balance is insufficient!");
-      return;
-    }
-    setLoading(true);
-    try {
-      const response = await nftMint(numericQuantity);
-      if (response?.user) {
-        toast.success("NFT minted successfully!");
-        setUser((prev) =>
-          prev ? { ...prev, ...response.user } : response.user,
-        );
-        if (response.nftData) {
-          setNftData(response.nftData);
-        } else {
-          await loadNftData();
-        }
-        await refreshUser();
-      } else {
-        toast.info(response?.message || "Please try again later!");
-      }
-    } catch (err) {
-      const msg = err?.response?.data?.message || err?.message || "Mint failed";
-      toast.error(msg);
-    } finally {
-      setShowMintModal(false);
-      setLoading(false);
-    }
-  };
+  const {
+    user,
+    showMintModal,
+    setShowMintModal,
+    quantity,
+    setQuantity,
+    displayNftData,
+    ownedCount,
+    rankLabel,
+    supplyLabel,
+    maxSupply,
+    mintProgress,
+    remainingNfts,
+    heroMintLabel,
+    handleNftMint,
+  } = useNftCollection();
 
   return (
     <LayoutADesktop>
@@ -245,75 +150,22 @@ export default function NFTADesktop() {
                 </span>
               </div>
 
-              <h2 className="text-[32px] font-extrabold leading-[1.08] tracking-tight text-gray-900">
-                {displayNftData.nftName || t("genesisCube", "Genesis Cube")}
-              </h2>
-              <p className="mt-2 max-w-xl text-sm leading-relaxed text-gray-500">
-                {displayNftData.nftDescription ||
-                  t(
-                    "genesisCubeDescription",
-                    "A limited edition collectible granting holders lifetime privileges across the PolyWallet ecosystem.",
-                  )}
-              </p>
+              <NftCollectionTitle displayNftData={displayNftData} />
             </div>
 
-            <div className="grid grid-cols-3 gap-2.5 min-w-0">
-              <div className="min-w-0 rounded-[18px] border border-gray-200/80 bg-white p-3.5 text-center shadow-[0_2px_10px_rgba(15,23,42,0.04)]">
-                <p className="text-[9px] font-bold uppercase tracking-wider text-gray-400">
-                  {t("owned", "Owned")}
-                </p>
-                <p className="mt-1 text-2xl font-black tabular-nums leading-none text-gray-900">
-                  {ownedCount.toLocaleString("en-US")}
-                </p>
-              </div>
-              <div className="min-w-0 rounded-[18px] border border-gray-200/80 bg-white p-3.5 text-center shadow-[0_2px_10px_rgba(15,23,42,0.04)]">
-                <p className="text-[9px] font-bold uppercase tracking-wider text-gray-400">
-                  {t("rank", "Rank")}
-                </p>
-                <p
-                  className="mt-1 truncate px-0.5 text-sm font-black leading-tight text-blue-600 sm:text-xl"
-                  title={rankLabel}
-                >
-                  {rankLabel}
-                </p>
-              </div>
-              <div className="min-w-0 rounded-[18px] border border-gray-200/80 bg-white p-3.5 text-center shadow-[0_2px_10px_rgba(15,23,42,0.04)]">
-                <p className="text-[9px] font-bold uppercase tracking-wider text-gray-400">
-                  {t("remaining", "Remaining")}
-                </p>
-                <p className="mt-1 text-2xl font-black tabular-nums leading-none text-gray-900">
-                  {supplyLabel}
-                </p>
-              </div>
-            </div>
+            <NftStatsRow
+              ownedCount={ownedCount}
+              rankLabel={rankLabel}
+              supplyLabel={supplyLabel}
+              maxSupply={maxSupply}
+              variant="desktop"
+            />
 
-            <div className="rounded-[28px] border border-gray-100 bg-white p-5 shadow-[0_2px_15px_rgba(0,0,0,0.03)]">
-                <div className="mb-3 flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
-                      {t("mintPrice", "Mint Price")}
-                    </p>
-                    <p className="mt-1 text-3xl font-black text-gray-900">
-                      ${displayNftData.nftPrice.toLocaleString("en-US")}
-                    </p>
-                  </div>
-                  <div className="text-right shrink-0">
-                    <p className="flex items-center justify-end gap-1 text-[10px] font-bold uppercase text-green-600">
-                      <Sparkles size={10} />
-                      {t("limited", "Limited")}
-                    </p>
-                    <p className="mt-1 text-xs font-mono font-bold text-gray-400">
-                      {mintedDisplay} / {limitedDisplay}
-                    </p>
-                  </div>
-                </div>
-              <div className="h-2.5 w-full overflow-hidden rounded-full bg-gray-100">
-                <div
-                  className="h-full rounded-full bg-gradient-to-r from-blue-500 to-cyan-400 shadow-[0_0_10px_rgba(37,99,235,0.35)]"
-                  style={{ width: `${mintProgress}%` }}
-                />
-              </div>
-            </div>
+            <NftMintPriceCard
+              displayNftData={displayNftData}
+              mintProgress={mintProgress}
+              variant="desktop"
+            />
             </div>
             <div className="mt-5">
               <button

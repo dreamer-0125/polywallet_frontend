@@ -23,8 +23,27 @@ export function getInjectedConnector(connectors) {
   );
 }
 
+/** Prefer Bitget Wallet, then other injected providers, then WalletConnect. */
+export function getPreferredWalletConnector(connectors) {
+  const bitget = connectors.find((c) =>
+    String(c.id).toLowerCase().includes("bitget"),
+  );
+  if (bitget) return bitget;
+
+  const injected = getInjectedConnector(connectors);
+  if (injected) return injected;
+
+  return (
+    connectors.find((c) => c.type === "walletConnect") ??
+    connectors.find((c) =>
+      String(c.id).toLowerCase().includes("walletconnect"),
+    ) ??
+    null
+  );
+}
+
 export const NO_INJECTED_WALLET_MESSAGE =
-  "No browser wallet detected. Install MetaMask (extension) or open this site in a wallet in-app browser. On mobile, you can also connect via WalletConnect.";
+  "No wallet detected. Install Bitget Wallet or open this site in the Bitget in-app browser. On mobile, connect via WalletConnect.";
 
 export const NO_POLYGON_CHAIN_MESSAGE =
   "Polygon is not in your wallet. Add the Polygon network in your wallet settings, or approve the add-network prompt when it appears.";

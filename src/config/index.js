@@ -2,50 +2,51 @@ import { createConfig, http } from "wagmi";
 import { polygon } from "wagmi/chains";
 import { injected, walletConnect } from "wagmi/connectors";
 import { reconnect } from "@wagmi/core";
+import { getBitgetProvider } from "../utils/bitgetWallet.js";
+import { WC_WALLET_IDS } from "./wallets.js";
 
 export const POLYGON_CHAIN_ID = polygon.id;
 
 const WALLETCONNECT_PROJECT_ID =
   import.meta.env.VITE_WALLETCONNECT_PROJECT_ID ||
-  // Fallback for existing deployments. Prefer setting VITE_WALLETCONNECT_PROJECT_ID in `.env`.
   "a28ade7e3fd9653b6d84bc72a8e4f32c";
 
 const appOrigin =
   typeof window !== "undefined" ? window.location.origin : "https://polywallet.app";
 
-const bitgetWalletTarget = {
-  id: "bitgetWallet",
-  name: "Bitget Wallet",
-  provider(window) {
-    if (!window) return undefined;
-    const bitkeep = window.bitkeep?.ethereum ?? window.bitkeep;
-    if (bitkeep?.request) return bitkeep;
-    const eth = window.ethereum;
-    if (!eth) return undefined;
-    if (eth.isBitKeep) return eth;
-    if (Array.isArray(eth.providers)) {
-      return eth.providers.find((p) => p?.isBitKeep);
-    }
-    return undefined;
-  },
-};
-
-/** Polygon-only; Bitget preferred, then injected / WalletConnect. */
+/** Bitget first (extension + in-app browser), then any injected wallet, then WalletConnect (mobile). */
 export const config = createConfig({
   chains: [polygon],
   multiInjectedProviderDiscovery: true,
   connectors: [
-    injected({ target: bitgetWalletTarget }),
-    injected({ target: "metaMask" }),
+    injected({
+      target() {
+        const provider = getBitgetProvider();
+        if (!provider) return undefined;
+        return {
+          id: "bitget",
+          name: "Bitget Wallet",
+          provider,
+        };
+      },
+    }),
     injected(),
     walletConnect({
       projectId: WALLETCONNECT_PROJECT_ID,
       showQrModal: true,
       metadata: {
         name: "PolyWallet",
-        description: "PolyWallet",
+        description: "PolyWallet — Bitget Wallet recommended",
         url: appOrigin,
         icons: [`${appOrigin}/logo.svg`],
+      },
+      qrModalOptions: {
+        explorerRecommendedWalletIds: [
+          WC_WALLET_IDS.bitget,
+          WC_WALLET_IDS.trust,
+          WC_WALLET_IDS.metamask,
+        ],
+        explorerExcludedWalletIds: "ALL",
       },
     }),
   ],

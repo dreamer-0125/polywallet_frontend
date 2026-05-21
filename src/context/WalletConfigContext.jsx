@@ -11,7 +11,7 @@ const defaultRankEntry = { bonusRate: 0, bonusLevel: 0, pointApy: 0 };
 
 const WalletConfigContext = createContext({
   loaded: false,
-  balanceInterestApy: 0.1,
+  balanceInterestApy: 0.07,
   maxPointApy: 0.6,
   rankData: {},
   rankCondition: [],
@@ -27,7 +27,7 @@ export function formatRatePercent(rate) {
 
 export const WalletConfigProvider = ({ children }) => {
   const [config, setConfig] = useState({
-    balanceInterestApy: 0.1,
+    balanceInterestApy: 0.07,
     maxPointApy: 0.6,
     rankData: {},
     rankCondition: [],
@@ -41,7 +41,7 @@ export const WalletConfigProvider = ({ children }) => {
         const data = await fetchWalletConfig();
         if (!cancelled && data) {
           setConfig({
-            balanceInterestApy: data.balanceInterestApy ?? 0.1,
+            balanceInterestApy: data.balanceInterestApy ?? 0.07,
             maxPointApy: data.maxPointApy ?? 0.6,
             rankData: data.rankData ?? {},
             rankCondition: data.rankCondition ?? [],
@@ -59,8 +59,11 @@ export const WalletConfigProvider = ({ children }) => {
   }, []);
 
   const getRankStats = useMemo(
-    () => (rank) => config.rankData[rank ?? ""] ?? defaultRankEntry,
-    [config.rankData]
+    () => (rank) => {
+      const key = rank === "JPManager" ? "Management" : (rank ?? "");
+      return config.rankData[key] ?? config.rankData[rank ?? ""] ?? defaultRankEntry;
+    },
+    [config.rankData],
   );
 
   const value = useMemo(

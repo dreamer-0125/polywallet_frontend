@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useMemo } from "react";
 import LayoutA from "./LayoutA";
 import HeaderActionsA from "./HeaderActionsA";
 import {
@@ -13,41 +13,14 @@ import {
 } from "lucide-react";
 import { useLocale } from "../../i18n";
 import Logo from "../../assets/LOGO-black.svg";
-import { useLoadingContext } from "../../context/LoadingContext";
-import { getNftData, nftMint } from "../../api";
-import { useAuth } from "../../context/AuthContext";
 import { useWalletConfig, formatRatePercent } from "../../context/WalletConfigContext";
-import { toast } from "react-toastify";
-const DEFAULT_NFT_DATA = {
-  nftPrice: 1000,
-  mintedNfts: 0,
-  nftLimited: 1000,
-  remainingNfts: 1000,
-  nftSeries: "Genesis",
-  nftName: "Genesis Cube",
-  nftEdition: 1,
-  nftDescription:
-    "A limited edition collectible granting holders lifetime privileges across the PolyWallet ecosystem.",
-};
-
-function formatSupply(amount) {
-  const n = Number(amount);
-  if (!Number.isFinite(n)) return "—";
-  if (n >= 1_000_000) {
-    const m = n / 1_000_000;
-    return `${m % 1 === 0 ? m : m.toFixed(1)}M`;
-  }
-  if (n >= 1_000) {
-    const k = n / 1_000;
-    return `${k % 1 === 0 ? k : k.toFixed(1)}K`;
-  }
-  return n.toLocaleString("en-US");
-}
+import NftStatsRow from "../nft/NftStatsRow";
+import NftCollectionTitle from "../nft/NftCollectionTitle";
+import NftMintPriceCard from "../nft/NftMintPriceCard";
+import { useNftCollection } from "../../hooks/useNftCollection";
 
 export default function NFTA() {
   const { t } = useLocale();
-  const { setLoading } = useLoadingContext();
-  const { user, setUser, refreshUser } = useAuth();
   const { balanceInterestApy, maxPointApy } = useWalletConfig();
   const privileges = useMemo(
     () => [
@@ -78,86 +51,23 @@ export default function NFTA() {
     ],
     [balanceInterestApy, maxPointApy]
   );
-  const [showMintModal, setShowMintModal] = useState(false);
-  const [quantity, setQuantity] = useState(1);
-  const [nftData, setNftData] = useState({});
-
-  const displayNftData = { ...DEFAULT_NFT_DATA, ...nftData };
-  const ownedCount = Number(user?.nftAmount ?? 0);
-  const rankLabel = user?.rank || "—";
-  const remainingNfts =
-    displayNftData.remainingNfts ??
-    Math.max(0, Number(displayNftData.nftLimited) - Number(displayNftData.mintedNfts));
-  const supplyLabel = remainingNfts.toLocaleString("en-US");
-  const editionLabel = `#${String(displayNftData.nftEdition ?? 1).padStart(3, "0")} / ${supplyLabel}`;
-  const mintProgress =
-    displayNftData.nftLimited > 0
-      ? Math.min(
-          100,
-          (displayNftData.mintedNfts / displayNftData.nftLimited) * 100,
-        )
-      : 0;
-
-  const loadNftData = useCallback(async () => {
-    try {
-      const response = await getNftData();
-      if (response?.nftData) {
-        setNftData(response.nftData);
-      }
-    } catch {
-      /* ignore — session errors handled globally */
-    }
-  }, []);
-
-  const init = useCallback(async () => {
-    if (!user?.id) return;
-    setLoading(true);
-    await loadNftData();
-    setLoading(false);
-  }, [user?.id, setLoading, loadNftData]);
-
-  useEffect(() => {
-    init();
-  }, [init]);
-
-  useEffect(() => {
-    if (!user?.id) return;
-    const id = setInterval(loadNftData, 30_000);
-    return () => clearInterval(id);
-  }, [user?.id, loadNftData]);
-
-  const handleNftMint = async () => {
-    const numericQuantity = Number(quantity);
-    const amount = displayNftData.nftPrice * numericQuantity;
-    if (amount > Number(user.polyBalance)) {
-      toast.info("Your Balance is insufficient!");
-      return;
-    }
-    setLoading(true);
-    try {
-      const response = await nftMint(numericQuantity);
-      if (response?.user) {
-        toast.success("NFT minted successfully!");
-        setUser((prev) =>
-          prev ? { ...prev, ...response.user } : response.user,
-        );
-        if (response.nftData) {
-          setNftData(response.nftData);
-        } else {
-          await loadNftData();
-        }
-        await refreshUser();
-      } else {
-        toast.info(response?.message || "Please try again later!");
-      }
-    } catch (err) {
-      const msg = err?.response?.data?.message || err?.message || "Mint failed";
-      toast.error(msg);
-    } finally {
-      setShowMintModal(false);
-      setLoading(false);
-    }
-  };
+  const {
+    user,
+    showMintModal,
+    setShowMintModal,
+    quantity,
+    setQuantity,
+    displayNftData,
+    ownedCount,
+    rankLabel,
+    supplyLabel,
+    maxSupply,
+    editionLabel,
+    heroMintLabel,
+    mintProgress,
+    remainingNfts,
+    handleNftMint,
+  } = useNftCollection();
 
   return (
     <LayoutA>
@@ -204,14 +114,14 @@ export default function NFTA() {
                 <path d="M68.3 71.5 95.4 87" fill="rgba(56, 189, 248)" stroke="rgba(255, 255, 255, 0.25)" stroke-width="4" stroke-linejoin="round"></path>
               </svg>
             </div>
-            <div class="absolute bottom-10 left-1/2 -translate-x-1/2 w-72 h-px bg-gradient-to-r from-transparent via-cyan-300/40 to-transparent"></div>
+            <div className="absolute bottom-10 left-1/2 -translate-x-1/2 w-72 h-px bg-gradient-to-r from-transparent via-cyan-300/40 to-transparent" />
 
             <span className="absolute top-3 left-3 inline-flex items-center gap-1.5 rounded-full bg-slate-900/40 backdrop-blur-md border border-white/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-white/90">
               <span className="h-1.5 w-1.5 rounded-full bg-cyan-300 shadow-[0_0_10px_rgba(34,211,238,0.9)]" />
-              {displayNftData.nftSeries || "Genesis"}
+              {displayNftData.nftSeries} {t("edition", "Edition")}
             </span>
             <span className="absolute top-3 right-3 inline-flex items-center rounded-full bg-slate-900/40 backdrop-blur-md border border-white/10 px-3 py-1.5 text-[10px] font-bold tabular-nums text-white/90">
-              {editionLabel}
+              {heroMintLabel}
             </span>
           </div>
         </div>
@@ -229,74 +139,22 @@ export default function NFTA() {
             </span>
           </div>
 
-          <h2 className="text-3xl  font-extrabold text-gray-900 leading-[1.05] tracking-tight">Genesis Cube</h2>
-          <p className="text-gray-500 text-sm mt-2 leading-relaxed">A limited edition collectible granting holders lifetime privileges across the PolyWallet ecosystem.</p>
+          <NftCollectionTitle displayNftData={displayNftData} />
         </div>
 
-        {/* Owned / Rank / Supply */}
-        <div className="grid grid-cols-3 gap-2.5">
-          <div className="min-w-0 bg-white p-3 rounded-[18px] border border-gray-200/80 shadow-[0_2px_10px_rgba(15,23,42,0.04)]">
-            <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-1">
-              {t("owned", "Owned")}
-            </p>
-            <p className="text-xl font-black text-gray-900 tabular-nums leading-none">
-              {ownedCount.toLocaleString("en-US")}
-            </p>
-          </div>
-          <div className="min-w-0 bg-white p-3 rounded-[18px] border border-gray-200/80 shadow-[0_2px_10px_rgba(15,23,42,0.04)]">
-            <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-1">
-              {t("rank", "Rank")}
-            </p>
-            <p
-              className="text-sm font-black text-blue-600 leading-tight truncate px-0.5 sm:text-lg"
-              title={rankLabel}
-            >
-              {rankLabel}
-            </p>
-          </div>
-          <div className="min-w-0 bg-white p-3 rounded-[18px] border border-gray-200/80 shadow-[0_2px_10px_rgba(15,23,42,0.04)]">
-            <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-1">
-              {t("remaining", "Remaining")}
-            </p>
-            <p className="text-xl font-black text-gray-900 tabular-nums leading-none">
-              {supplyLabel}
-            </p>
-          </div>
-        </div>
+        <NftStatsRow
+          ownedCount={ownedCount}
+          rankLabel={rankLabel}
+          supplyLabel={supplyLabel}
+          maxSupply={maxSupply}
+          variant="mobile"
+        />
 
-        {/* Mint price card */}
-        <div className="bg-white rounded-[28px] p-5 shadow-[0_2px_15px_rgba(0,0,0,0.03)] border border-gray-100">
-          <div className="flex justify-between items-start gap-3 mb-3">
-            <div>
-              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
-                {t("mintPrice", "Mint Price")}
-              </p>
-              <p className="text-3xl font-black text-gray-900 tracking-tight mt-1">
-                ${displayNftData.nftPrice.toLocaleString("en-US")}
-              </p>
-            </div>
-            <div className="text-right shrink-0">
-              <p className="text-green-600 text-[10px] font-bold flex items-center gap-1 justify-end uppercase tracking-wide">
-                <Sparkles size={10} />
-                {t("limited", "Limited")}
-              </p>
-              <p className="text-gray-400 text-xs font-mono font-bold mt-1 tabular-nums">
-                {displayNftData.mintedNfts.toLocaleString("en-US")} /{" "}
-                {displayNftData.nftLimited.toLocaleString("en-US")}
-                <span className="block text-[10px] font-sans font-semibold text-gray-500 mt-0.5">
-                  {remainingNfts.toLocaleString("en-US")} {t("remaining", "remaining")}
-                </span>
-              </p>
-            </div>
-          </div>
-
-          <div className="h-2.5 w-full bg-gray-100 rounded-full overflow-hidden">
-            <div
-              className="h-full rounded-full bg-gradient-to-r from-blue-500 to-cyan-400 shadow-[0_0_10px_rgba(37,99,235,0.35)]"
-              style={{ width: `${mintProgress}%` }}
-            />
-          </div>
-        </div>
+        <NftMintPriceCard
+          displayNftData={displayNftData}
+          mintProgress={mintProgress}
+          variant="mobile"
+        />
 
         {/* Mint NFT */}
         <button

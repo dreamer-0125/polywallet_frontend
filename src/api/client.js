@@ -21,8 +21,9 @@ apiClient.interceptors.response.use(
       reqUrl.includes("/auth/session") ||
       reqUrl.includes("/auth/request-challenge") ||
       reqUrl.includes("/auth/verify-signature");
-    // 401 = expired/missing token; 403 = wrong role. Do not logout on 429 rate limits.
-    if ((status === 401 || status === 403) && !isAuthEndpoint) {
+    const hadResponse = !!error.response;
+    // Only 401 = missing/invalid session. 403 is often business logic (e.g. insufficient balance).
+    if (hadResponse && status === 401 && !isAuthEndpoint) {
       window.dispatchEvent(new CustomEvent("auth:unauthorized"));
     }
     return Promise.reject(error);

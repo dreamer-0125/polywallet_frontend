@@ -55,4 +55,14 @@ export const rankMeta = {
     badge: "text-pink-600",
     icon: Zap,
   },
+  Management: {
+    color: "bg-indigo-100 text-indigo-800",
+    badge: "text-indigo-700",
+    icon: Gem,
+  },
+  JPManager: {
+    color: "bg-indigo-100 text-indigo-800",
+    badge: "text-indigo-700",
+    icon: Gem,
+  },
 };

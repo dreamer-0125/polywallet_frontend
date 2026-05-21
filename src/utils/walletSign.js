@@ -8,6 +8,8 @@ import { polygon } from "wagmi/chains";
 import { stringToHex } from "viem";
 import { config } from "../config/index.js";
 import { isPolygonChain } from "./polygonChain.js";
+import { getBitgetProvider, isBitgetProviderAvailable } from "./bitgetWallet.js";
+import { isBitgetConnectorActive } from "./walletConnection.js";
 
 function sleep(ms) {
   return new Promise((resolve) => {
@@ -54,28 +56,49 @@ async function getActiveProvider() {
 /**
  * WalletConnect + mobile browsers need time after connect before sign requests work.
  */
-async function waitForWalletReady(expectedAddress, { maxMs = 5000 } = {}) {
+async function waitForWalletReady(
+  expectedAddress,
+  { maxMs = 5000, requirePolygon = true } = {},
+) {
   const target = expectedAddress?.toLowerCase();
   const start = Date.now();
+  const wc = isWalletConnectActive();
+  const timeout = wc ? Math.max(maxMs, 12000) : maxMs;
 
-  while (Date.now() - start < maxMs) {
+  while (Date.now() - start < timeout) {
     const account = getAccount(config);
-    const ready =
-      account.isConnected &&
-      account.address?.toLowerCase() === target &&
-      isPolygonChain(getChainId(config));
+    const addressOk =
+      account.isConnected && account.address?.toLowerCase() === target;
+    const chainOk = !requirePolygon || isPolygonChain(getChainId(config));
 
-    if (ready) return true;
-    await sleep(200);
+    if (addressOk && chainOk) return true;
+    await sleep(250);
   }
 
   return false;
 }
 
-async function signViaProvider(walletAddress, text) {
-  const provider = await getActiveProvider();
+async function signViaProvider(walletAddress, text, providerOverride) {
+  const provider = providerOverride ?? (await getActiveProvider());
   if (!provider?.request) {
     throw new Error("No wallet provider available for signing");
+  }
+
+  const wc = isWalletConnectActive();
+  // Bitget / some mobile wallets reject hex-only personal_sign over WalletConnect.
+  if (wc) {
+    try {
+      return await provider.request({
+        method: "personal_sign",
+        params: [text, walletAddress],
+      });
+    } catch {
+      const hexMessage = stringToHex(text);
+      return provider.request({
+        method: "personal_sign",
+        params: [hexMessage, walletAddress],
+      });
+    }
   }
 
   const hexMessage = stringToHex(text);
@@ -83,6 +106,14 @@ async function signViaProvider(walletAddress, text) {
     method: "personal_sign",
     params: [hexMessage, walletAddress],
   });
+}
+
+async function signViaBitgetProvider(walletAddress, text) {
+  const provider = getBitgetProvider();
+  if (!provider?.request) {
+    throw new Error("Bitget provider not available");
+  }
+  return signViaProvider(walletAddress, text, provider);
 }
 
 async function signViaConnectorClient(walletAddress, text) {
@@ -102,16 +133,31 @@ async function signViaConnectorClient(walletAddress, text) {
 export async function signChallengeWithWallet(walletAddress, message) {
   const text = normalizeMessage(message);
 
-  const ready = await waitForWalletReady(walletAddress);
+  const wcActive = isWalletConnectActive();
+  const ready = await waitForWalletReady(walletAddress, {
+    maxMs: wcActive ? 12000 : 6000,
+    requirePolygon: !wcActive,
+  });
   if (!ready) {
     throw new Error(
       "Wallet is not ready on Polygon yet. Switch to Polygon in your wallet, then try again.",
     );
   }
 
-  // Extra settle time for WalletConnect on mobile (chain/session sync lag).
-  if (isMobileBrowser() && isWalletConnectActive()) {
-    await sleep(1200);
+  // Direct Bitget extension / in-app browser only — not WalletConnect-to-Bitget.
+  if (isBitgetConnectorActive() && isBitgetProviderAvailable()) {
+    await sleep(400);
+    try {
+      return await signViaBitgetProvider(walletAddress, text);
+    } catch (bitgetErr) {
+      if (isUserRejected(bitgetErr)) throw bitgetErr;
+    }
+  }
+
+  if (wcActive) {
+    await sleep(1500);
+  } else if (isMobileBrowser()) {
+    await sleep(600);
   }
 
   try {
@@ -153,9 +199,13 @@ export function getSignErrorMessage(error) {
     return "Could not sign in. Open your wallet app, approve the sign-in message on Polygon, then tap Connect Wallet again.";
   }
 
-  if (isMobileBrowser()) {
-    return "Could not sign in. Open your wallet app and approve the message, or use MetaMask on Polygon.";
+  if (isBitgetProviderAvailable()) {
+    return "Could not sign in. Approve the message in Bitget Wallet (Polygon network).";
   }
 
-  return "Could not sign with your wallet. Use MetaMask on Polygon, unlock your wallet, and try again.";
+  if (isMobileBrowser()) {
+    return "Could not sign in. Open your wallet app and approve the message on Polygon.";
+  }
+
+  return "Could not sign with your wallet. Switch to Polygon, unlock your wallet, and try again.";
 }
