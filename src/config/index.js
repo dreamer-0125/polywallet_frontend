@@ -56,15 +56,15 @@ export const config = createConfig({
         provider: () => getBitgetProvider(),
       },
     }),
+    // [0] Case 1 mobile bkcode — wagmi id is always "walletConnect"; order matters for lookup.
     walletConnect({
-      id: "walletConnectBkcode",
       projectId: WALLETCONNECT_PROJECT_ID,
       showQrModal: false,
       isNewChainsStale: false,
       metadata: wcMetadata,
     }),
+    // [1] Case 2 Web3Modal in browser.
     walletConnect({
-      id: "walletConnectModal",
       projectId: WALLETCONNECT_PROJECT_ID,
       showQrModal: true,
       isNewChainsStale: false,

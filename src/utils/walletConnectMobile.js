@@ -1,8 +1,8 @@
 import { config } from "../config/index.js";
-import { isMobileBrowser } from "./device.js";
+import { isAndroid, isMobileBrowser } from "./device.js";
 import { isBitgetProviderAvailable } from "./bitgetWallet.js";
 
-/** Mobile browser tab without Bitget extension — Case 1 bkcode.vip deep link. */
+/** Mobile browser tab without Bitget injected provider — Case 1 bkcode.vip. */
 export function isMobileWebWithoutBitget() {
   return isMobileBrowser() && !isBitgetProviderAvailable();
 }
@@ -17,36 +17,53 @@ function openDeepLinkViaAnchor(url) {
   const anchor = document.createElement("a");
   anchor.href = url;
   anchor.rel = "noopener noreferrer";
+  anchor.target = "_self";
   document.body.appendChild(anchor);
   anchor.click();
   document.body.removeChild(anchor);
 }
 
 /**
- * Case 1: bkcode.vip only (no AppKit / Web3Modal UI).
+ * Case 1: open WC URI in Bitget via bkcode.vip (+ native / intent fallbacks).
  * @see https://web3.bitget.com/en/docs/configuration/deeplink
  */
-export function openBkcodeWalletConnectUri(wcUri) {
+export function openBkcodeWalletConnectUri(wcUri, handoff = null) {
   if (!wcUri || typeof window === "undefined") return;
 
   lastWalletConnectUri = wcUri;
   const encoded = encodeURIComponent(wcUri);
-  openDeepLinkViaAnchor(`https://bkcode.vip/wc?uri=${encoded}`);
-}
 
-/** @deprecated Use openBkcodeWalletConnectUri — alias for existing call sites. */
-export function openBitgetWalletConnectUri(wcUri, handoff = null) {
+  const links = {
+    bkcodeWc: `https://bkcode.vip/wc?uri=${encoded}`,
+    bkcodeAlt: `https://bkcode.vip?wc=${encoded}`,
+    native: `bitkeep://wc?uri=${encoded}`,
+    bitget: `bitget://wc?uri=${encoded}`,
+    androidIntent: `intent://wc?uri=${encoded}#Intent;scheme=bitkeep;package=com.bitkeep.wallet;end`,
+  };
+
   if (handoff?.window && !handoff.window.closed) {
     try {
-      const encoded = encodeURIComponent(wcUri);
-      handoff.window.location.href = `https://bkcode.vip/wc?uri=${encoded}`;
-      lastWalletConnectUri = wcUri;
+      handoff.window.location.href = isAndroid()
+        ? links.androidIntent
+        : links.bkcodeWc;
       return;
     } catch {
       /* fall through */
     }
   }
-  openBkcodeWalletConnectUri(wcUri);
+
+  const ordered = isAndroid()
+    ? [links.androidIntent, links.bkcodeWc, links.bkcodeAlt, links.native, links.bitget]
+    : [links.bkcodeWc, links.bkcodeAlt, links.bitget, links.native];
+
+  for (const url of ordered) {
+    openDeepLinkViaAnchor(url);
+    return;
+  }
+}
+
+export function openBitgetWalletConnectUri(wcUri, handoff = null) {
+  openBkcodeWalletConnectUri(wcUri, handoff);
 }
 
 export function createBitgetWalletConnectHandoff() {
@@ -75,8 +92,7 @@ export function openCurrentSiteInBitgetDappBrowser() {
     version: "1",
   });
 
-  const isAndroid = /android/i.test(navigator.userAgent);
-  const link = isAndroid
+  const link = isAndroid()
     ? `https://bkcode.vip?${params.toString()}`
     : `bitkeep://bkconnect?${params.toString()}`;
 
@@ -87,7 +103,9 @@ async function clearStaleWalletConnectSession(connector) {
   if (!connector?.getProvider) return;
   try {
     const provider = await connector.getProvider();
-    if (provider?.session) {
+    if (!provider?.session) return;
+    const accounts = provider.session?.namespaces?.eip155?.accounts ?? [];
+    if (accounts.length === 0) {
       await provider.disconnect();
     }
   } catch {
@@ -96,7 +114,7 @@ async function clearStaleWalletConnectSession(connector) {
 }
 
 /**
- * Case 1: relay WalletConnect pairing URI → bkcode.vip (zero AppKit dependency).
+ * Case 1: relay WalletConnect pairing URI → Bitget (listen before connectAsync).
  */
 export async function bindBkcodeWalletConnectUriRelay(connector, options = {}) {
   if (!isMobileWebWithoutBitget() || !connector?.getProvider) {
@@ -105,11 +123,12 @@ export async function bindBkcodeWalletConnectUriRelay(connector, options = {}) {
 
   const { handoff = null } = options;
   const handlers = [];
+  let opened = false;
 
   const relayUri = (uri) => {
-    if (typeof uri === "string" && uri.startsWith("wc:")) {
-      openBitgetWalletConnectUri(uri, handoff);
-    }
+    if (opened || typeof uri !== "string" || !uri.startsWith("wc:")) return;
+    opened = true;
+    openBitgetWalletConnectUri(uri, handoff);
   };
 
   try {
@@ -142,5 +161,4 @@ export async function bindBkcodeWalletConnectUriRelay(connector, options = {}) {
   };
 }
 
-/** @deprecated Alias */
 export const bindBitgetWalletConnectUriRelay = bindBkcodeWalletConnectUriRelay;

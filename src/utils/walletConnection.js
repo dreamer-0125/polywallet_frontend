@@ -28,8 +28,25 @@ function sleep(ms) {
 }
 
 function isWalletConnectConnector(connector) {
-  const id = String(connector?.id || "").toLowerCase();
-  return connector?.type === "walletConnect" || id.includes("walletconnect");
+  return connector?.type === "walletConnect";
+}
+
+function waitForVisibilityResume() {
+  if (typeof document === "undefined") return Promise.resolve();
+  if (document.visibilityState === "visible") return Promise.resolve();
+  return new Promise((resolve) => {
+    const onVisible = () => {
+      if (document.visibilityState === "visible") {
+        document.removeEventListener("visibilitychange", onVisible);
+        resolve();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    setTimeout(() => {
+      document.removeEventListener("visibilitychange", onVisible);
+      resolve();
+    }, 120_000);
+  });
 }
 
 async function waitForMobileWalletConnectAccount(timeoutMs = 90_000) {
@@ -50,7 +67,7 @@ async function waitForMobileWalletConnectAccount(timeoutMs = 90_000) {
       };
     }
 
-    await sleep(500);
+    await sleep(400);
   }
   return null;
 }
@@ -89,8 +106,8 @@ export async function safeConnect(connectAsync, connector, options = {}) {
 
   const existing = getAccount(config);
   const current = config.state.connections.get(config.state.current);
-  const currentId = current?.connector?.id;
-  const targetId = connector?.id;
+  const currentId = current?.connector?.uid ?? current?.connector?.id;
+  const targetId = connector?.uid ?? connector?.id;
 
   if (
     existing.isConnected &&
@@ -117,22 +134,28 @@ export async function safeConnect(connectAsync, connector, options = {}) {
   const isWalletConnect = isWalletConnectConnector(connector);
 
   if (isWalletConnect && isWeb3ModalMode(wcMode)) {
-    try {
-      return await connectViaWeb3Modal(connectAsync, connector);
-    } catch (err) {
-      if (isUserRejectedConnectError(err)) throw err;
-      throw err;
-    }
+    return connectViaWeb3Modal(connectAsync, connector);
   }
 
   const isBkcodeCase =
     isWalletConnect && isBkcodeDeeplinkMode(wcMode) && isMobileWebWithoutBitget();
 
   let unbindUriRelay = () => {};
+  let stopVisibilityReconnect = () => {};
   if (isBkcodeCase) {
+    await connector.getProvider?.().catch(() => null);
     unbindUriRelay = await bindBkcodeWalletConnectUriRelay(connector, {
       handoff: options.handoff ?? null,
     });
+    const onVisible = () => {
+      if (document.visibilityState === "visible") {
+        reconnect(config).catch(() => {});
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    stopVisibilityReconnect = () => {
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }
 
   try {
@@ -157,21 +180,17 @@ export async function safeConnect(connectAsync, connector, options = {}) {
       }
     }
 
-    if (isBkcodeCase) {
-      const recovered = await waitForMobileWalletConnectAccount();
+    if (isBkcodeCase && !isUserRejectedConnectError(err)) {
+      await waitForVisibilityResume();
+      const recovered = await waitForMobileWalletConnectAccount(90_000);
       if (recovered?.address) {
         return recovered;
-      }
-      if (!isUserRejectedConnectError(err)) {
-        const late = await waitForMobileWalletConnectAccount(30_000);
-        if (late?.address) {
-          return late;
-        }
       }
     }
 
     throw err;
   } finally {
+    stopVisibilityReconnect();
     if (isBkcodeCase) {
       setTimeout(unbindUriRelay, 120_000);
     } else {
@@ -193,7 +212,9 @@ export function resolveConnector(connectors, key) {
         c.type === "injected" &&
         String(c.id).toLowerCase().includes("bitget"),
     );
-    if (bitgetInjected) return bitgetInjected;
+    if (bitgetInjected && isBitgetProviderAvailable()) {
+      return bitgetInjected;
+    }
     return getBkcodeWalletConnectConnector(connectors);
   }
 
@@ -225,7 +246,6 @@ export function isBitgetConnectorActive() {
 
 export { resolveWalletConnectMode, WALLET_CONNECT_MODE };
 
-/** Wallet picker entries for Landing / modals. */
 export function listWalletOptions() {
   const hasBitget = isBitgetProviderAvailable();
   const options = [];
@@ -245,7 +265,7 @@ export function listWalletOptions() {
     options.push({
       key: CONNECTOR_KEYS.bitget,
       title: "Bitget Wallet",
-      subtitle: "Open app via bkcode.vip (recommended)",
+      subtitle: "Open app — approve connection, then return to Chrome",
       recommended: true,
       mode: WALLET_CONNECT_MODE.BKCODE_DEEPLINK,
     });

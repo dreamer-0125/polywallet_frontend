@@ -37,28 +37,27 @@ export function hasBitgetWallet() {
 
 export { getBitgetProvider };
 
-export function getBkcodeWalletConnectConnector(connectors) {
-  return (
-    connectors.find((c) => normalize(c.id) === "walletconnectbkcode") ??
-    connectors.find(
-      (c) =>
-        c.type === "walletConnect" &&
-        normalize(c.id).includes("bkcode"),
-    ) ??
-    null
-  );
+/** All WalletConnect connectors (wagmi always uses id "walletConnect"). */
+export function listWalletConnectConnectors(connectors) {
+  return (connectors ?? []).filter((c) => c.type === "walletConnect");
 }
 
+/**
+ * Case 1 — first WC entry in config (showQrModal: false, bkcode relay).
+ * wagmi ignores custom `id`; match by registration order in config/index.js.
+ */
+export function getBkcodeWalletConnectConnector(connectors) {
+  const wc = listWalletConnectConnectors(connectors);
+  return wc[0] ?? null;
+}
+
+/**
+ * Case 2 — second WC entry (showQrModal: true, Web3Modal UI).
+ */
 export function getWeb3ModalWalletConnectConnector(connectors) {
-  return (
-    connectors.find((c) => normalize(c.id) === "walletconnectmodal") ??
-    connectors.find(
-      (c) =>
-        c.type === "walletConnect" &&
-        normalize(c.id).includes("modal"),
-    ) ??
-    null
-  );
+  const wc = listWalletConnectConnectors(connectors);
+  if (wc.length >= 2) return wc[1];
+  return wc[0] ?? null;
 }
 
 export function getWalletConnectConnector(connectors, connectorKey) {
@@ -69,12 +68,7 @@ export function getWalletConnectConnector(connectors, connectorKey) {
   if (isWeb3ModalMode(mode)) {
     return getWeb3ModalWalletConnectConnector(connectors);
   }
-  return (
-    getWeb3ModalWalletConnectConnector(connectors) ??
-    getBkcodeWalletConnectConnector(connectors) ??
-    connectors.find((c) => c.type === "walletConnect") ??
-    null
-  );
+  return getWeb3ModalWalletConnectConnector(connectors) ?? getBkcodeWalletConnectConnector(connectors);
 }
 
 async function connectorHasProvider(connector) {
@@ -87,9 +81,6 @@ async function connectorHasProvider(connector) {
   }
 }
 
-/**
- * Prefer Bitget injected; otherwise WalletConnect (bkcode or Web3Modal by mode).
- */
 export async function pickWalletConnector(connectors, connectorKey = CONNECTOR_KEYS.bitget) {
   const list = connectors ?? [];
   const bitgetCandidates = list.filter(
