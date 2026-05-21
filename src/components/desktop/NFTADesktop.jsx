@@ -20,8 +20,9 @@ import { useWalletConfig, formatRatePercent } from "../../context/WalletConfigCo
 
 const DEFAULT_NFT_DATA = {
   nftPrice: 1000,
-  mintedNfts: 3247,
-  nftLimited: 10000,
+  mintedNfts: 0,
+  nftLimited: 1000,
+  remainingNfts: 1000,
   nftSeries: "Genesis",
   nftName: "Genesis Cube",
   nftEdition: 1,
@@ -65,7 +66,7 @@ function NftHeroVisual() {
 export default function NFTADesktop() {
   const { t } = useLocale();
   const { setLoading } = useLoadingContext();
-  const { user, setUser } = useAuth();
+  const { user, setUser, refreshUser } = useAuth();
   const { balanceInterestApy, maxPointApy } = useWalletConfig();
   const privileges = useMemo(
     () => [
@@ -103,7 +104,10 @@ export default function NFTADesktop() {
   const displayNftData = { ...DEFAULT_NFT_DATA, ...nftData };
   const ownedCount = Number(user?.nftAmount ?? 0);
   const rankLabel = user?.rank || "—";
-  const supplyLabel = formatSupply(displayNftData.nftLimited);
+  const remainingNfts =
+    displayNftData.remainingNfts ??
+    Math.max(0, Number(displayNftData.nftLimited) - Number(displayNftData.mintedNfts));
+  const supplyLabel = remainingNfts.toLocaleString("en-US");
   const mintedDisplay = displayNftData.mintedNfts.toLocaleString("en-US");
   const limitedDisplay = displayNftData.nftLimited.toLocaleString("en-US");
   const limitedShort = formatSupply(displayNftData.nftLimited);
@@ -116,23 +120,33 @@ export default function NFTADesktop() {
         )
       : 0;
 
-  const init = useCallback(async () => {
-    setLoading(true);
+  const loadNftData = useCallback(async () => {
     try {
-      const response = await getNftData(user.id);
-      if (response.nftData) {
+      const response = await getNftData();
+      if (response?.nftData) {
         setNftData(response.nftData);
       }
     } catch {
       /* ignore */
-    } finally {
-      setLoading(false);
     }
-  }, [user.id, setLoading]);
+  }, []);
+
+  const init = useCallback(async () => {
+    if (!user?.id) return;
+    setLoading(true);
+    await loadNftData();
+    setLoading(false);
+  }, [user?.id, setLoading, loadNftData]);
 
   useEffect(() => {
     init();
   }, [init]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    const id = setInterval(loadNftData, 30_000);
+    return () => clearInterval(id);
+  }, [user?.id, loadNftData]);
 
   const handleNftMint = async () => {
     const numericQuantity = Number(quantity);
@@ -146,7 +160,15 @@ export default function NFTADesktop() {
       const response = await nftMint(numericQuantity);
       if (response?.user) {
         toast.success("NFT minted successfully!");
-        setUser(response.user);
+        setUser((prev) =>
+          prev ? { ...prev, ...response.user } : response.user,
+        );
+        if (response.nftData) {
+          setNftData(response.nftData);
+        } else {
+          await loadNftData();
+        }
+        await refreshUser();
       } else {
         toast.info(response?.message || "Please try again later!");
       }
@@ -235,8 +257,8 @@ export default function NFTADesktop() {
               </p>
             </div>
 
-            <div className="grid grid-cols-3 gap-2.5">
-              <div className="rounded-[18px] border border-gray-200/80 bg-white p-3.5 text-center shadow-[0_2px_10px_rgba(15,23,42,0.04)]">
+            <div className="grid grid-cols-3 gap-2.5 min-w-0">
+              <div className="min-w-0 rounded-[18px] border border-gray-200/80 bg-white p-3.5 text-center shadow-[0_2px_10px_rgba(15,23,42,0.04)]">
                 <p className="text-[9px] font-bold uppercase tracking-wider text-gray-400">
                   {t("owned", "Owned")}
                 </p>
@@ -244,20 +266,20 @@ export default function NFTADesktop() {
                   {ownedCount.toLocaleString("en-US")}
                 </p>
               </div>
-              <div className="rounded-[18px] border border-gray-200/80 bg-white p-3.5 text-center shadow-[0_2px_10px_rgba(15,23,42,0.04)]">
+              <div className="min-w-0 rounded-[18px] border border-gray-200/80 bg-white p-3.5 text-center shadow-[0_2px_10px_rgba(15,23,42,0.04)]">
                 <p className="text-[9px] font-bold uppercase tracking-wider text-gray-400">
                   {t("rank", "Rank")}
                 </p>
                 <p
-                  className="mt-1 truncate px-0.5 text-xl font-black leading-none text-blue-600"
+                  className="mt-1 truncate px-0.5 text-sm font-black leading-tight text-blue-600 sm:text-xl"
                   title={rankLabel}
                 >
                   {rankLabel}
                 </p>
               </div>
-              <div className="rounded-[18px] border border-gray-200/80 bg-white p-3.5 text-center shadow-[0_2px_10px_rgba(15,23,42,0.04)]">
+              <div className="min-w-0 rounded-[18px] border border-gray-200/80 bg-white p-3.5 text-center shadow-[0_2px_10px_rgba(15,23,42,0.04)]">
                 <p className="text-[9px] font-bold uppercase tracking-wider text-gray-400">
-                  {t("supply", "Supply")}
+                  {t("remaining", "Remaining")}
                 </p>
                 <p className="mt-1 text-2xl font-black tabular-nums leading-none text-gray-900">
                   {supplyLabel}

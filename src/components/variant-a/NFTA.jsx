@@ -20,8 +20,9 @@ import { useWalletConfig, formatRatePercent } from "../../context/WalletConfigCo
 import { toast } from "react-toastify";
 const DEFAULT_NFT_DATA = {
   nftPrice: 1000,
-  mintedNfts: 3247,
-  nftLimited: 10000,
+  mintedNfts: 0,
+  nftLimited: 1000,
+  remainingNfts: 1000,
   nftSeries: "Genesis",
   nftName: "Genesis Cube",
   nftEdition: 1,
@@ -46,7 +47,7 @@ function formatSupply(amount) {
 export default function NFTA() {
   const { t } = useLocale();
   const { setLoading } = useLoadingContext();
-  const { user, setUser } = useAuth();
+  const { user, setUser, refreshUser } = useAuth();
   const { balanceInterestApy, maxPointApy } = useWalletConfig();
   const privileges = useMemo(
     () => [
@@ -84,7 +85,10 @@ export default function NFTA() {
   const displayNftData = { ...DEFAULT_NFT_DATA, ...nftData };
   const ownedCount = Number(user?.nftAmount ?? 0);
   const rankLabel = user?.rank || "—";
-  const supplyLabel = formatSupply(displayNftData.nftLimited);
+  const remainingNfts =
+    displayNftData.remainingNfts ??
+    Math.max(0, Number(displayNftData.nftLimited) - Number(displayNftData.mintedNfts));
+  const supplyLabel = remainingNfts.toLocaleString("en-US");
   const editionLabel = `#${String(displayNftData.nftEdition ?? 1).padStart(3, "0")} / ${supplyLabel}`;
   const mintProgress =
     displayNftData.nftLimited > 0
@@ -94,23 +98,33 @@ export default function NFTA() {
         )
       : 0;
 
-  const init = useCallback(async () => {
-    setLoading(true);
+  const loadNftData = useCallback(async () => {
     try {
-      const response = await getNftData(user.id);
-      if (response.nftData) {
+      const response = await getNftData();
+      if (response?.nftData) {
         setNftData(response.nftData);
       }
     } catch {
       /* ignore — session errors handled globally */
-    } finally {
-      setLoading(false);
     }
-  }, [user.id, setLoading]);
+  }, []);
+
+  const init = useCallback(async () => {
+    if (!user?.id) return;
+    setLoading(true);
+    await loadNftData();
+    setLoading(false);
+  }, [user?.id, setLoading, loadNftData]);
 
   useEffect(() => {
     init();
   }, [init]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    const id = setInterval(loadNftData, 30_000);
+    return () => clearInterval(id);
+  }, [user?.id, loadNftData]);
 
   const handleNftMint = async () => {
     const numericQuantity = Number(quantity);
@@ -124,7 +138,15 @@ export default function NFTA() {
       const response = await nftMint(numericQuantity);
       if (response?.user) {
         toast.success("NFT minted successfully!");
-        setUser(response.user);
+        setUser((prev) =>
+          prev ? { ...prev, ...response.user } : response.user,
+        );
+        if (response.nftData) {
+          setNftData(response.nftData);
+        } else {
+          await loadNftData();
+        }
+        await refreshUser();
       } else {
         toast.info(response?.message || "Please try again later!");
       }
@@ -226,7 +248,7 @@ export default function NFTA() {
               {t("rank", "Rank")}
             </p>
             <p
-              className="text-lg font-black text-blue-600 leading-none truncate px-0.5"
+              className="text-sm font-black text-blue-600 leading-tight truncate px-0.5 sm:text-lg"
               title={rankLabel}
             >
               {rankLabel}
@@ -234,7 +256,7 @@ export default function NFTA() {
           </div>
           <div className="min-w-0 bg-white p-3 rounded-[18px] border border-gray-200/80 shadow-[0_2px_10px_rgba(15,23,42,0.04)]">
             <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-1">
-              {t("supply", "Supply")}
+              {t("remaining", "Remaining")}
             </p>
             <p className="text-xl font-black text-gray-900 tabular-nums leading-none">
               {supplyLabel}
@@ -258,9 +280,12 @@ export default function NFTA() {
                 <Sparkles size={10} />
                 {t("limited", "Limited")}
               </p>
-              <p className="text-gray-400 text-xs font-mono font-bold mt-1">
+              <p className="text-gray-400 text-xs font-mono font-bold mt-1 tabular-nums">
                 {displayNftData.mintedNfts.toLocaleString("en-US")} /{" "}
                 {displayNftData.nftLimited.toLocaleString("en-US")}
+                <span className="block text-[10px] font-sans font-semibold text-gray-500 mt-0.5">
+                  {remainingNfts.toLocaleString("en-US")} {t("remaining", "remaining")}
+                </span>
               </p>
             </div>
           </div>

@@ -55,6 +55,7 @@ export const AuthProvider = ({ children }) => {
   const { connectAsync } = useConnect();
   const connectors = useConnectors();
   const wrongChainNotifiedRef = useRef(null);
+  const refreshInFlightRef = useRef(null);
 
   const isAuthenticated = !!user?.id;
 
@@ -308,33 +309,51 @@ export const AuthProvider = ({ children }) => {
   };
 
   const refreshUser = useCallback(async () => {
-    try {
-      const res = await fetchMe();
-      if (res?.success && res.user) {
-        setUser(res.user);
-        return res.user;
-      }
-    } catch (err) {
-      // /me not yet deployed (404) or transient error — fall back to session endpoint
-      if (err?.response?.status === 404 || !err?.response) {
-        try {
-          const res = await fetchAuthSession();
-          if (res?.success && res.user) {
-            setUser((prev) => (prev ? { ...prev, ...res.user } : res.user));
-            return res.user;
+    if (refreshInFlightRef.current) {
+      return refreshInFlightRef.current;
+    }
+
+    const run = (async () => {
+      try {
+        const res = await fetchMe();
+        if (res?.success && res.user) {
+          setUser(res.user);
+          return res.user;
+        }
+      } catch (err) {
+        const status = err?.response?.status;
+        if (status === 429) {
+          return null;
+        }
+        if (status === 404 || !err?.response) {
+          try {
+            const res = await fetchAuthSession();
+            if (res?.success && res.user) {
+              setUser((prev) => (prev ? { ...prev, ...res.user } : res.user));
+              return res.user;
+            }
+          } catch {
+            /* ignore */
           }
-        } catch {
-          /* ignore */
         }
       }
+      return null;
+    })();
+
+    refreshInFlightRef.current = run;
+    try {
+      return await run;
+    } finally {
+      if (refreshInFlightRef.current === run) {
+        refreshInFlightRef.current = null;
+      }
     }
-    return null;
   }, []);
 
   // Poll while logged in; refresh when returning from background (common on mobile)
   useEffect(() => {
     if (!user?.id) return;
-    const id = setInterval(refreshUser, 10_000);
+    const id = setInterval(refreshUser, 30_000);
     const onVisible = () => {
       if (document.visibilityState === "visible") {
         refreshUser();

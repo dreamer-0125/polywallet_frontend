@@ -152,13 +152,8 @@ export const lookupRecipientByPolyWalletId = async (polyWalletId) => {
 };
 
 export const fetchMe = async () => {
-  try {
-    const response = await apiClient.get("/user/me");
-    return response.data;
-  } catch (error) {
-    console.error("fetchMe error:", error);
-    throw error;
-  }
+  const response = await apiClient.get("/user/me");
+  return response.data;
 };
 
 export const fetchWalletConfig = async () => {

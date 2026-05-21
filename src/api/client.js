@@ -21,7 +21,7 @@ apiClient.interceptors.response.use(
       reqUrl.includes("/auth/session") ||
       reqUrl.includes("/auth/request-challenge") ||
       reqUrl.includes("/auth/verify-signature");
-    // 401 = expired/missing token, 403 = wrong role (e.g. admin cookie on user endpoint)
+    // 401 = expired/missing token; 403 = wrong role. Do not logout on 429 rate limits.
     if ((status === 401 || status === 403) && !isAuthEndpoint) {
       window.dispatchEvent(new CustomEvent("auth:unauthorized"));
     }
