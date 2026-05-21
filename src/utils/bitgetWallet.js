@@ -17,3 +17,8 @@ export function getBitgetProvider() {
 export function isBitgetProviderAvailable() {
   return !!getBitgetProvider();
 }
+
+/** True when running inside Bitget Wallet in-app browser (injected provider present). */
+export function isBitgetInAppBrowser() {
+  return isBitgetProviderAvailable();
+}

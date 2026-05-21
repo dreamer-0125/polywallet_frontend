@@ -31,6 +31,7 @@ export const config = createConfig({
     walletConnect({
       projectId: WALLETCONNECT_PROJECT_ID,
       showQrModal: true,
+      isNewChainsStale: false,
       metadata: {
         name: "PolyWallet",
         description: "PolyWallet — Bitget Wallet recommended",
@@ -43,7 +44,6 @@ export const config = createConfig({
           WC_WALLET_IDS.trust,
           WC_WALLET_IDS.metamask,
         ],
-        explorerExcludedWalletIds: "ALL",
       },
     }),
   ],

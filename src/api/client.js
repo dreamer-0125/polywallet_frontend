@@ -12,6 +12,13 @@ export const apiClient = axios.create({
   },
 });
 
+/** Ignore 401 → logout briefly after sign-in (mobile wallet WebViews). */
+let unauthorizedSuppressedUntil = 0;
+
+export function suppressAuthUnauthorized(ms = 20_000) {
+  unauthorizedSuppressedUntil = Date.now() + ms;
+}
+
 apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
@@ -25,7 +32,12 @@ apiClient.interceptors.response.use(
       reqUrl.includes("/user/find");
     const hadResponse = !!error.response;
     // Only 401 = missing/invalid session. 403 is often business logic (e.g. insufficient balance).
-    if (hadResponse && status === 401 && !isAuthEndpoint) {
+    if (
+      hadResponse &&
+      status === 401 &&
+      !isAuthEndpoint &&
+      Date.now() >= unauthorizedSuppressedUntil
+    ) {
       window.dispatchEvent(new CustomEvent("auth:unauthorized"));
     }
     return Promise.reject(error);

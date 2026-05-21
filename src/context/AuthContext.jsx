@@ -35,6 +35,8 @@ import {
 import { isMobileWebWithoutBitget } from "../utils/walletConnectors.js";
 import { CONNECTOR_KEYS } from "../config/wallets.js";
 import { hydrateUser } from "../utils/userDisplay.js";
+import { confirmAuthSessionAndSuppressUnauthorized } from "../utils/authSession.js";
+import { isBitgetInAppBrowser } from "../utils/bitgetWallet.js";
 import {
   getSignErrorMessage,
   isMobileBrowser,
@@ -125,8 +127,8 @@ export const AuthProvider = ({ children }) => {
       return undefined;
     }
 
-    // WalletConnect reconnects often flicker address/chain on mobile — skip mismatch logout.
-    if (isWalletConnectActive()) {
+    // WalletConnect / Bitget in-app: address can flicker on mobile — skip mismatch logout.
+    if (isWalletConnectActive() || isBitgetInAppBrowser()) {
       return undefined;
     }
 
@@ -195,7 +197,8 @@ export const AuthProvider = ({ children }) => {
         toast.warn(NO_BITGET_WALLET_MSG);
         if (isMobileWebWithoutBitget()) {
           toast.info(
-            "Opening WalletConnect — choose Bitget Wallet (or another wallet) in the list.",
+            "Tap Bitget Wallet in the list, approve the connection in the app, then return to this browser.",
+            { autoClose: 8000 },
           );
         }
       }
@@ -240,7 +243,9 @@ export const AuthProvider = ({ children }) => {
     }
 
     if (isWalletConnect) {
-      await new Promise((resolve) => setTimeout(resolve, 1200));
+      await new Promise((resolve) =>
+        setTimeout(resolve, isMobileWebWithoutBitget() ? 2500 : 1200),
+      );
     } else if (isMobileBrowser()) {
       await new Promise((resolve) => setTimeout(resolve, 600));
     }
@@ -318,6 +323,8 @@ export const AuthProvider = ({ children }) => {
         /* verify already set user */
       }
 
+      await confirmAuthSessionAndSuppressUnauthorized();
+
       return true;
     } catch (error) {
       console.error("Authentication error:", error);
@@ -361,6 +368,11 @@ export const AuthProvider = ({ children }) => {
             "Account created. Approve the sign-in message in your wallet to finish signing in.",
           );
           return false;
+        }
+
+        const session = await confirmAuthSessionAndSuppressUnauthorized();
+        if (session?.user) {
+          setUser(hydrateUser(session.user));
         }
         return true;
       }

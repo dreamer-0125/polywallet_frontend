@@ -1,4 +1,8 @@
 import { isMobileBrowser } from "./device.js";
+import {
+  getBitgetProvider,
+  isBitgetProviderAvailable,
+} from "./bitgetWallet.js";
 
 const BITGET_MATCH = /bitget|bitkeep/;
 
@@ -22,25 +26,11 @@ export function isBitgetConnector(connector) {
   return [id, name, rdns].some((s) => BITGET_MATCH.test(s));
 }
 
-/** Bitget Wallet (formerly BitKeep) injected provider. */
-export function getBitgetProvider() {
-  if (typeof window === "undefined") return null;
-
-  const bitkeep = window.bitkeep?.ethereum ?? window.bitkeep;
-  if (bitkeep?.request) return bitkeep;
-
-  const eth = window.ethereum;
-  if (!eth) return null;
-  if (eth.isBitKeep) return eth;
-  if (Array.isArray(eth.providers)) {
-    return eth.providers.find((p) => p?.isBitKeep) ?? null;
-  }
-  return null;
-}
-
 export function hasBitgetWallet() {
-  return !!getBitgetProvider();
+  return isBitgetProviderAvailable();
 }
+
+export { getBitgetProvider };
 
 export function getWalletConnectConnector(connectors) {
   return (

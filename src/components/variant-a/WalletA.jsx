@@ -31,6 +31,7 @@ import {
   loadPendingDeposit,
 } from "../../utils/depositFlow.js";
 import { toast } from "react-toastify";
+import { fetchAuthSession } from "../../api/auth.api.js";
 import { format } from "date-fns";
 import { POLYGON_USDC } from "../../config";
 import { ensurePolygonChain } from "../../utils/polygonChain";
@@ -71,7 +72,19 @@ export default function WalletA() {
 
   useEffect(() => {
     if (!user?.id) return;
-    refreshUser();
+    let cancelled = false;
+    (async () => {
+      try {
+        const session = await fetchAuthSession();
+        if (cancelled || !session?.success) return;
+        await refreshUser();
+      } catch {
+        /* session not ready yet — avoid 401 logout on mobile */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [user?.id, refreshUser]);
   const { address } = useAccount();
   const { data: rawUsdcBalance } = useReadContract({

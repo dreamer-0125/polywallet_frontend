@@ -1,12 +1,52 @@
-import { disconnect, getAccount } from "@wagmi/core";
+import { disconnect, getAccount, reconnect } from "@wagmi/core";
 import { polygon } from "wagmi/chains";
 import { config } from "../config/index.js";
+import { isMobileBrowser } from "./device.js";
 import { isBitgetProviderAvailable } from "./bitgetWallet.js";
 import {
   isMobileWebWithoutBitget,
   pickWalletConnector,
 } from "./walletConnectors.js";
 import { CONNECTOR_KEYS } from "../config/wallets.js";
+
+function sleep(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+function isWalletConnectConnector(connector) {
+  return (
+    connector?.type === "walletConnect" ||
+    String(connector?.id || "").toLowerCase().includes("walletconnect")
+  );
+}
+
+/**
+ * Mobile Safari/Chrome: user approves WC in the wallet app after returning to the tab.
+ */
+async function waitForMobileWalletConnectAccount(timeoutMs = 90_000) {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    try {
+      await reconnect(config);
+    } catch {
+      /* ignore */
+    }
+
+    const acc = getAccount(config);
+    if (acc.isConnected && acc.address) {
+      return {
+        address: acc.address,
+        chainId: acc.chainId ?? polygon.id,
+        alreadyConnected: true,
+      };
+    }
+
+    await sleep(500);
+  }
+  return null;
+}
 
 export const NO_BITGET_WALLET_MSG = "No bitget wallet";
 
@@ -51,6 +91,9 @@ export async function safeConnect(connectAsync, connector) {
     }
   }
 
+  const isWalletConnect = isWalletConnectConnector(connector);
+  const isMobileWeb = isMobileBrowser() && isMobileWebWithoutBitget();
+
   try {
     const res = await connectAsync({
       connector,
@@ -72,8 +115,30 @@ export async function safeConnect(connectAsync, connector) {
         };
       }
     }
+
+    // User switched to wallet app before approving — wait for session when they return.
+    if (isWalletConnect && isMobileWeb) {
+      const recovered = await waitForMobileWalletConnectAccount();
+      if (recovered?.address) {
+        return recovered;
+      }
+      if (!isUserRejectedConnectError(err)) {
+        const late = await waitForMobileWalletConnectAccount(30_000);
+        if (late?.address) {
+          return late;
+        }
+      }
+    }
+
     throw err;
   }
+}
+
+function isUserRejectedConnectError(error) {
+  const code = error?.code ?? error?.cause?.code;
+  if (code === 4001) return true;
+  const msg = String(error?.message || "").toLowerCase();
+  return msg.includes("rejected") || msg.includes("denied") || msg.includes("cancel");
 }
 
 /**
