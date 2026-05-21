@@ -20,12 +20,11 @@ import {
 import { toast } from "react-toastify";
 import {
   ensurePolygonChain,
-  getInjectedConnector,
   isPolygonChain,
-  NO_INJECTED_WALLET_MESSAGE,
   NO_POLYGON_CHAIN_MESSAGE,
   WRONG_NETWORK_MESSAGE,
 } from "../utils/polygonChain";
+import { pickWalletConnector } from "../utils/walletConnectors";
 import {
   getSignErrorMessage,
   isMobileBrowser,
@@ -143,27 +142,22 @@ export const AuthProvider = ({ children }) => {
   const connectWallet = async () => {
     const hasInjectedProvider =
       typeof window !== "undefined" && !!window.ethereum?.request;
-    const injectedConnector = hasInjectedProvider
-      ? getInjectedConnector(connectors)
-      : null;
-    const walletConnectConnector =
-      connectors.find((c) => c.type === "walletConnect") ??
-      connectors.find((c) => String(c.id).toLowerCase().includes("walletconnect")) ??
-      null;
 
-    const preferredConnector = injectedConnector ?? walletConnectConnector;
+    const { connector: preferredConnector, isBitget } =
+      await pickWalletConnector(connectors);
+
     if (!preferredConnector) {
       toast.error(
-        "No wallet connector available. Install MetaMask (mobile/extension) or enable WalletConnect.",
+        "No wallet connector available. Install Bitget Wallet, MetaMask, or use WalletConnect.",
       );
       return "";
     }
-    if (!injectedConnector && preferredConnector === walletConnectConnector) {
-      // More helpful than the injected-only message on mobile browsers.
-      toast.info("Opening WalletConnect… choose your wallet app to continue.");
-    } else if (!injectedConnector) {
-      toast.error(NO_INJECTED_WALLET_MESSAGE);
-      return "";
+
+    if (!isBitget) {
+      toast.warn("install bitget wallet");
+      if (preferredConnector.type === "walletConnect") {
+        toast.info("Opening WalletConnect… choose your wallet app to continue.");
+      }
     }
 
     let connectedAddress = "";

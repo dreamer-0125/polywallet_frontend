@@ -13,11 +13,30 @@ const WALLETCONNECT_PROJECT_ID =
 const appOrigin =
   typeof window !== "undefined" ? window.location.origin : "https://polywallet.app";
 
-/** Polygon-only; injected preferred, WalletConnect for mobile wallets. */
+const bitgetWalletTarget = {
+  id: "bitgetWallet",
+  name: "Bitget Wallet",
+  provider(window) {
+    if (!window) return undefined;
+    const bitkeep = window.bitkeep?.ethereum ?? window.bitkeep;
+    if (bitkeep?.request) return bitkeep;
+    const eth = window.ethereum;
+    if (!eth) return undefined;
+    if (eth.isBitKeep) return eth;
+    if (Array.isArray(eth.providers)) {
+      return eth.providers.find((p) => p?.isBitKeep);
+    }
+    return undefined;
+  },
+};
+
+/** Polygon-only; Bitget preferred, then injected / WalletConnect. */
 export const config = createConfig({
   chains: [polygon],
   multiInjectedProviderDiscovery: true,
   connectors: [
+    injected({ target: bitgetWalletTarget }),
+    injected({ target: "metaMask" }),
     injected(),
     walletConnect({
       projectId: WALLETCONNECT_PROJECT_ID,

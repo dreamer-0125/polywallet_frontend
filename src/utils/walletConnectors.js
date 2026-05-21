@@ -1,0 +1,128 @@
+const BITGET_MATCH = /bitget|bitkeep/;
+
+function normalize(value) {
+  return String(value ?? "").toLowerCase();
+}
+
+function connectorRdnsString(connector) {
+  const rdns = connector?.rdns;
+  if (!rdns) return "";
+  if (typeof rdns === "string") return normalize(rdns);
+  if (Array.isArray(rdns)) return rdns.map(normalize).join(" ");
+  return "";
+}
+
+export function isBitgetConnector(connector) {
+  if (!connector || connector.type !== "injected") return false;
+  const id = normalize(connector.id);
+  const name = normalize(connector.name);
+  const rdns = connectorRdnsString(connector);
+  return [id, name, rdns].some((s) => BITGET_MATCH.test(s));
+}
+
+/** Bitget Wallet (formerly BitKeep) injected provider. */
+export function getBitgetProvider() {
+  if (typeof window === "undefined") return null;
+
+  const bitkeep = window.bitkeep?.ethereum ?? window.bitkeep;
+  if (bitkeep?.request) return bitkeep;
+
+  const eth = window.ethereum;
+  if (!eth) return null;
+  if (eth.isBitKeep) return eth;
+  if (Array.isArray(eth.providers)) {
+    return eth.providers.find((p) => p?.isBitKeep) ?? null;
+  }
+  return null;
+}
+
+export function hasBitgetWallet() {
+  return !!getBitgetProvider();
+}
+
+export function getWalletConnectConnector(connectors) {
+  return (
+    connectors.find((c) => c.type === "walletConnect") ??
+    connectors.find((c) => normalize(c.id).includes("walletconnect")) ??
+    null
+  );
+}
+
+export function findMetaMaskConnector(connectors) {
+  return (
+    connectors.find((c) => normalize(c.id) === "metamask") ??
+    connectors.find(
+      (c) => c.type === "injected" && normalize(c.name).includes("metamask"),
+    ) ??
+    null
+  );
+}
+
+/** MetaMask, another injected wallet, or WalletConnect — never Bitget. */
+export function findFallbackConnector(connectors) {
+  const list = connectors ?? [];
+
+  const metamask = findMetaMaskConnector(list);
+  if (metamask) return metamask;
+
+  const otherInjected = list.find(
+    (c) =>
+      c.type === "injected" &&
+      !isBitgetConnector(c) &&
+      normalize(c.id) !== "bitgetwallet" &&
+      normalize(c.id) !== "injected",
+  );
+  if (otherInjected) return otherInjected;
+
+  const genericInjected = list.find(
+    (c) => c.type === "injected" && normalize(c.id) === "injected",
+  );
+  if (
+    genericInjected &&
+    typeof window !== "undefined" &&
+    window.ethereum?.request
+  ) {
+    return genericInjected;
+  }
+
+  return getWalletConnectConnector(list);
+}
+
+async function connectorHasProvider(connector) {
+  if (!connector?.getProvider) return false;
+  try {
+    const provider = await connector.getProvider();
+    return !!provider?.request;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Prefer Bitget when installed; otherwise return a fallback connector.
+ * @returns {Promise<{ connector: import('wagmi').Connector | null, isBitget: boolean }>}
+ */
+export async function pickWalletConnector(connectors) {
+  const list = connectors ?? [];
+  const bitgetCandidates = list.filter(
+    (c) => isBitgetConnector(c) || normalize(c.id) === "bitgetwallet",
+  );
+
+  for (const candidate of bitgetCandidates) {
+    if (await connectorHasProvider(candidate)) {
+      return { connector: candidate, isBitget: true };
+    }
+  }
+
+  if (hasBitgetWallet()) {
+    const configured = list.find((c) => normalize(c.id) === "bitgetwallet");
+    if (configured) {
+      return { connector: configured, isBitget: true };
+    }
+  }
+
+  return {
+    connector: findFallbackConnector(list),
+    isBitget: false,
+  };
+}
