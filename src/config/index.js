@@ -3,6 +3,7 @@ import { polygon } from "wagmi/chains";
 import { injected, walletConnect } from "wagmi/connectors";
 import { reconnect } from "@wagmi/core";
 import { getBitgetProvider } from "../utils/bitgetWallet.js";
+import { isMobileWebWithoutBitget } from "../utils/walletConnectMobile.js";
 import { WC_WALLET_IDS } from "./wallets.js";
 
 export const POLYGON_CHAIN_ID = polygon.id;
@@ -30,7 +31,9 @@ export const config = createConfig({
     injected(),
     walletConnect({
       projectId: WALLETCONNECT_PROJECT_ID,
-      showQrModal: true,
+      // Mobile web: relay WC URI to Bitget via deep link (modal-only breaks pairing).
+      showQrModal:
+        typeof window !== "undefined" ? !isMobileWebWithoutBitget() : true,
       isNewChainsStale: false,
       metadata: {
         name: "PolyWallet",

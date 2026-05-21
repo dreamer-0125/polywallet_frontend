@@ -1,4 +1,5 @@
 import { apiClient } from "./client.js";
+import { setAuthToken, clearAuthToken } from "../utils/authToken.js";
 
 export const requestAuthChallenge = async (walletAddress) => {
   try {
@@ -19,6 +20,9 @@ export const verifyAuthSignature = async (walletAddress, signature, originalMess
       signature,
       originalMessage,
     });
+    if (response.data?.token) {
+      setAuthToken(response.data.token);
+    }
     return response.data;
   } catch (error) {
     console.error("verifyAuthSignature error:", error);
@@ -39,6 +43,7 @@ export const fetchAuthSession = async () => {
 
 /** Clears httpOnly auth cookie on the server */
 export const logoutApi = async () => {
+  clearAuthToken();
   try {
     const response = await apiClient.post("/auth/logout");
     return response.data;

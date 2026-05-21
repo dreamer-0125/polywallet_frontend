@@ -32,7 +32,8 @@ import {
   resolvePreferredConnector,
   NO_BITGET_WALLET_MSG,
 } from "../utils/walletConnection.js";
-import { isMobileWebWithoutBitget } from "../utils/walletConnectors.js";
+import { isMobileWebWithoutBitget } from "../utils/walletConnectMobile.js";
+import { clearAuthToken } from "../utils/authToken.js";
 import { CONNECTOR_KEYS } from "../config/wallets.js";
 import { hydrateUser } from "../utils/userDisplay.js";
 import { confirmAuthSessionAndSuppressUnauthorized } from "../utils/authSession.js";
@@ -69,6 +70,7 @@ export const AuthProvider = ({ children }) => {
   const refreshInFlightRef = useRef(null);
   const mismatchCheckTimerRef = useRef(null);
   const authBootstrapRef = useRef(false);
+  const unauthorizedHandledRef = useRef(false);
   const isAuthenticated = !!user?.id;
 
   useEffect(() => {
@@ -79,14 +81,6 @@ export const AuthProvider = ({ children }) => {
         if (cancelled) return;
         if (res?.success && res.user) {
           setUser(hydrateUser(res.user));
-          try {
-            const meRes = await fetchMe();
-            if (!cancelled && meRes?.success && meRes.user) {
-              setUser(hydrateUser(meRes.user));
-            }
-          } catch {
-            /* ignore — session data already set above */
-          }
         }
       } catch {
         /* ignore */
@@ -101,10 +95,15 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     const handleUnauthorized = () => {
-      if (authBootstrapRef.current) return;
+      if (authBootstrapRef.current || unauthorizedHandledRef.current) return;
+      unauthorizedHandledRef.current = true;
       toast.info("Please sign in again with your wallet.");
       setUser(null);
+      clearAuthToken();
       logoutApi().catch(() => {});
+      setTimeout(() => {
+        unauthorizedHandledRef.current = false;
+      }, 5000);
     };
     window.addEventListener("auth:unauthorized", handleUnauthorized);
     return () => window.removeEventListener("auth:unauthorized", handleUnauthorized);
@@ -197,8 +196,8 @@ export const AuthProvider = ({ children }) => {
         toast.warn(NO_BITGET_WALLET_MSG);
         if (isMobileWebWithoutBitget()) {
           toast.info(
-            "Tap Bitget Wallet in the list, approve the connection in the app, then return to this browser.",
-            { autoClose: 8000 },
+            "Opening Bitget Wallet — approve the connection request, then return to this browser.",
+            { autoClose: 10000 },
           );
         }
       }
@@ -384,7 +383,9 @@ export const AuthProvider = ({ children }) => {
       toast.error("Registration failed");
       return false;
     } finally {
-      authBootstrapRef.current = false;
+      setTimeout(() => {
+        authBootstrapRef.current = false;
+      }, 12_000);
     }
   };
 
@@ -449,6 +450,7 @@ export const AuthProvider = ({ children }) => {
 
   const logout = useCallback(async () => {
     setUser(null);
+    clearAuthToken();
     try {
       await logoutApi();
     } catch {

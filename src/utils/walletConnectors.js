@@ -1,8 +1,8 @@
-import { isMobileBrowser } from "./device.js";
 import {
   getBitgetProvider,
   isBitgetProviderAvailable,
 } from "./bitgetWallet.js";
+import { isMobileWebWithoutBitget } from "./walletConnectMobile.js";
 
 const BITGET_MATCH = /bitget|bitkeep/;
 
@@ -50,10 +50,7 @@ export function findMetaMaskConnector(connectors) {
   );
 }
 
-/** Mobile browser tab (not Bitget/MetaMask in-app) — use WalletConnect to reach Bitget app. */
-export function isMobileWebWithoutBitget() {
-  return isMobileBrowser() && !hasBitgetWallet();
-}
+export { isMobileWebWithoutBitget } from "./walletConnectMobile.js";
 
 /** MetaMask, another injected wallet, or WalletConnect — never Bitget. */
 export async function findFallbackConnector(connectors) {

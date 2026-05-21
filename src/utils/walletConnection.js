@@ -3,10 +3,11 @@ import { polygon } from "wagmi/chains";
 import { config } from "../config/index.js";
 import { isMobileBrowser } from "./device.js";
 import { isBitgetProviderAvailable } from "./bitgetWallet.js";
+import { pickWalletConnector } from "./walletConnectors.js";
 import {
+  bindBitgetWalletConnectUriRelay,
   isMobileWebWithoutBitget,
-  pickWalletConnector,
-} from "./walletConnectors.js";
+} from "./walletConnectMobile.js";
 import { CONNECTOR_KEYS } from "../config/wallets.js";
 
 function sleep(ms) {
@@ -92,7 +93,13 @@ export async function safeConnect(connectAsync, connector) {
   }
 
   const isWalletConnect = isWalletConnectConnector(connector);
-  const isMobileWeb = isMobileBrowser() && isMobileWebWithoutBitget();
+  const isMobileWeb = isMobileWebWithoutBitget();
+
+  let unbindUriRelay = () => {};
+  if (isWalletConnect && isMobileWeb) {
+    await connector.getProvider?.().catch(() => null);
+    unbindUriRelay = await bindBitgetWalletConnectUriRelay(connector);
+  }
 
   try {
     const res = await connectAsync({
@@ -131,6 +138,8 @@ export async function safeConnect(connectAsync, connector) {
     }
 
     throw err;
+  } finally {
+    unbindUriRelay();
   }
 }
 

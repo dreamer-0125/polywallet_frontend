@@ -27,11 +27,11 @@ export async function waitForAuthSession(maxAttempts = 12, delayMs = 500) {
 
 /** After verify/register, ignore transient 401s while the cookie propagates. */
 export async function confirmAuthSessionAndSuppressUnauthorized() {
-  const session = await waitForAuthSession();
+  const session = await waitForAuthSession(20, 400);
   if (session?.user) {
-    suppressAuthUnauthorized(30_000);
+    suppressAuthUnauthorized(120_000);
     return session;
   }
-  suppressAuthUnauthorized(15_000);
+  suppressAuthUnauthorized(60_000);
   return null;
 }
