@@ -32,7 +32,12 @@ import {
   resolvePreferredConnector,
   NO_BITGET_WALLET_MSG,
 } from "../utils/walletConnection.js";
-import { isMobileWebWithoutBitget } from "../utils/walletConnectMobile.js";
+import {
+  createBitgetWalletConnectHandoff,
+  getLastBitgetWalletConnectUri,
+  isMobileWebWithoutBitget,
+  openBitgetWalletConnectUri,
+} from "../utils/walletConnectMobile.js";
 import { clearAuthToken } from "../utils/authToken.js";
 import { CONNECTOR_KEYS } from "../config/wallets.js";
 import { hydrateUser } from "../utils/userDisplay.js";
@@ -187,6 +192,13 @@ export const AuthProvider = ({ children }) => {
   const connectWallet = async (connectorKey = CONNECTOR_KEYS.bitget) => {
     let connector = null;
     let usedBitget = false;
+    const useMobileWalletConnect =
+      isMobileWebWithoutBitget() &&
+      (connectorKey === CONNECTOR_KEYS.bitget ||
+        connectorKey === CONNECTOR_KEYS.walletConnect);
+    const handoff = useMobileWalletConnect
+      ? createBitgetWalletConnectHandoff()
+      : null;
 
     if (connectorKey === CONNECTOR_KEYS.bitget) {
       const picked = await resolvePreferredConnector(connectors);
@@ -196,13 +208,31 @@ export const AuthProvider = ({ children }) => {
         toast.warn(NO_BITGET_WALLET_MSG);
         if (isMobileWebWithoutBitget()) {
           toast.info(
-            "Opening Bitget Wallet — approve the connection request, then return to this browser.",
-            { autoClose: 10000 },
+            "Opening Bitget Wallet — approve the connection request in the app, then return to Chrome.",
+            {
+              autoClose: 15000,
+              onClick: () => {
+                const uri = getLastBitgetWalletConnectUri();
+                if (uri) openBitgetWalletConnectUri(uri);
+              },
+            },
           );
         }
       }
     } else {
       connector = resolveConnector(connectors, connectorKey);
+      if (useMobileWalletConnect && connector?.type === "walletConnect") {
+        toast.info(
+          "Opening Bitget Wallet — approve the connection request in the app, then return to Chrome.",
+          {
+            autoClose: 15000,
+            onClick: () => {
+              const uri = getLastBitgetWalletConnectUri();
+              if (uri) openBitgetWalletConnectUri(uri);
+            },
+          },
+        );
+      }
     }
 
     if (!connector) {
@@ -218,7 +248,7 @@ export const AuthProvider = ({ children }) => {
     let connectedChainId = chainId;
 
     try {
-      const result = await safeConnect(connectAsync, connector);
+      const result = await safeConnect(connectAsync, connector, { handoff });
       connectedAddress = result.address;
       connectedChainId = result.chainId;
     } catch (err) {

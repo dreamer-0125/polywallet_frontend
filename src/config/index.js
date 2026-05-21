@@ -42,10 +42,22 @@ export const config = createConfig({
         icons: [`${appOrigin}/logo.svg`],
       },
       qrModalOptions: {
+        enableExplorer: true,
+        enableMobileFullScreen: true,
         explorerRecommendedWalletIds: [
           WC_WALLET_IDS.bitget,
           WC_WALLET_IDS.trust,
           WC_WALLET_IDS.metamask,
+        ],
+        mobileWallets: [
+          {
+            id: WC_WALLET_IDS.bitget,
+            name: "Bitget Wallet",
+            links: {
+              native: "bitkeep://wc",
+              universal: "https://bkcode.vip/wc",
+            },
+          },
         ],
       },
     }),

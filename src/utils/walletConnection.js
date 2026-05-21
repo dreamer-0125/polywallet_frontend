@@ -64,7 +64,11 @@ export function isConnectorAlreadyConnectedError(error) {
 /**
  * Connect with the chosen connector. Reconnects if another wallet was active.
  */
-export async function safeConnect(connectAsync, connector) {
+/**
+ * @param {import('wagmi').Connector} connector
+ * @param {{ handoff?: { window: Window } | null }} [options]
+ */
+export async function safeConnect(connectAsync, connector, options = {}) {
   const existing = getAccount(config);
   const current = config.state.connections.get(config.state.current);
   const currentId = current?.connector?.id;
@@ -97,8 +101,9 @@ export async function safeConnect(connectAsync, connector) {
 
   let unbindUriRelay = () => {};
   if (isWalletConnect && isMobileWeb) {
-    await connector.getProvider?.().catch(() => null);
-    unbindUriRelay = await bindBitgetWalletConnectUriRelay(connector);
+    unbindUriRelay = await bindBitgetWalletConnectUriRelay(connector, {
+      handoff: options.handoff ?? null,
+    });
   }
 
   try {
@@ -139,7 +144,11 @@ export async function safeConnect(connectAsync, connector) {
 
     throw err;
   } finally {
-    unbindUriRelay();
+    if (isWalletConnect && isMobileWeb) {
+      setTimeout(unbindUriRelay, 120_000);
+    } else {
+      unbindUriRelay();
+    }
   }
 }
 
