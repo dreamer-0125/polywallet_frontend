@@ -20,14 +20,10 @@ export const config = createConfig({
   multiInjectedProviderDiscovery: true,
   connectors: [
     injected({
-      target() {
-        const provider = getBitgetProvider();
-        if (!provider) return undefined;
-        return {
-          id: "bitget",
-          name: "Bitget Wallet",
-          provider,
-        };
+      target: {
+        id: "bitget",
+        name: "Bitget Wallet",
+        provider: () => getBitgetProvider(),
       },
     }),
     injected({ target: "metaMask" }),

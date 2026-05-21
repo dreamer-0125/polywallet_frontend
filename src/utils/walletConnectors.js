@@ -1,3 +1,5 @@
+import { isMobileBrowser } from "./device.js";
+
 const BITGET_MATCH = /bitget|bitkeep/;
 
 function normalize(value) {
@@ -58,30 +60,40 @@ export function findMetaMaskConnector(connectors) {
   );
 }
 
+/** Mobile browser tab (not Bitget/MetaMask in-app) — use WalletConnect to reach Bitget app. */
+export function isMobileWebWithoutBitget() {
+  return isMobileBrowser() && !hasBitgetWallet();
+}
+
 /** MetaMask, another injected wallet, or WalletConnect — never Bitget. */
-export function findFallbackConnector(connectors) {
+export async function findFallbackConnector(connectors) {
   const list = connectors ?? [];
 
-  const metamask = findMetaMaskConnector(list);
-  if (metamask) return metamask;
+  if (isMobileWebWithoutBitget()) {
+    return getWalletConnectConnector(list);
+  }
 
-  const otherInjected = list.find(
-    (c) =>
+  const metamask = findMetaMaskConnector(list);
+  if (metamask && (await connectorHasProvider(metamask))) {
+    return metamask;
+  }
+
+  for (const c of list) {
+    if (
       c.type === "injected" &&
       !isBitgetConnector(c) &&
-      normalize(c.id) !== "bitgetwallet" &&
-      normalize(c.id) !== "injected",
-  );
-  if (otherInjected) return otherInjected;
+      normalize(c.id) !== "bitget" &&
+      normalize(c.id) !== "injected" &&
+      (await connectorHasProvider(c))
+    ) {
+      return c;
+    }
+  }
 
   const genericInjected = list.find(
     (c) => c.type === "injected" && normalize(c.id) === "injected",
   );
-  if (
-    genericInjected &&
-    typeof window !== "undefined" &&
-    window.ethereum?.request
-  ) {
+  if (genericInjected && (await connectorHasProvider(genericInjected))) {
     return genericInjected;
   }
 
@@ -124,7 +136,7 @@ export async function pickWalletConnector(connectors) {
   }
 
   return {
-    connector: findFallbackConnector(list),
+    connector: await findFallbackConnector(list),
     isBitget: false,
   };
 }

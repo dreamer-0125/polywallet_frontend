@@ -7,6 +7,8 @@ import React, {
   useRef,
 } from "react";
 import { useAccount, useChainId, useConnect, useConnectors } from "wagmi";
+import { getAccount } from "@wagmi/core";
+import { config as wagmiConfig } from "../config/index.js";
 import { polygon } from "wagmi/chains";
 import {
   createUser,
@@ -30,6 +32,7 @@ import {
   resolvePreferredConnector,
   NO_BITGET_WALLET_MSG,
 } from "../utils/walletConnection.js";
+import { isMobileWebWithoutBitget } from "../utils/walletConnectors.js";
 import { CONNECTOR_KEYS } from "../config/wallets.js";
 import { hydrateUser } from "../utils/userDisplay.js";
 import {
@@ -63,6 +66,7 @@ export const AuthProvider = ({ children }) => {
   const wrongChainNotifiedRef = useRef(null);
   const refreshInFlightRef = useRef(null);
   const mismatchCheckTimerRef = useRef(null);
+  const authBootstrapRef = useRef(false);
   const isAuthenticated = !!user?.id;
 
   useEffect(() => {
@@ -95,6 +99,7 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     const handleUnauthorized = () => {
+      if (authBootstrapRef.current) return;
       toast.info("Please sign in again with your wallet.");
       setUser(null);
       logoutApi().catch(() => {});
@@ -110,7 +115,13 @@ export const AuthProvider = ({ children }) => {
       mismatchCheckTimerRef.current = null;
     }
 
-    if (!sessionChecked || !user?.walletAddress || !address || !isConnected) {
+    if (
+      authBootstrapRef.current ||
+      !sessionChecked ||
+      !user?.walletAddress ||
+      !address ||
+      !isConnected
+    ) {
       return undefined;
     }
 
@@ -182,6 +193,11 @@ export const AuthProvider = ({ children }) => {
       usedBitget = picked.isBitget;
       if (!usedBitget) {
         toast.warn(NO_BITGET_WALLET_MSG);
+        if (isMobileWebWithoutBitget()) {
+          toast.info(
+            "Opening WalletConnect — choose Bitget Wallet (or another wallet) in the list.",
+          );
+        }
       }
     } else {
       connector = resolveConnector(connectors, connectorKey);
@@ -195,10 +211,6 @@ export const AuthProvider = ({ children }) => {
     }
 
     const isWalletConnect = connector.type === "walletConnect";
-
-    if (isWalletConnect && !usedBitget) {
-      toast.info("Opening WalletConnect… choose your wallet app to continue.");
-    }
 
     let connectedAddress = "";
     let connectedChainId = chainId;
@@ -214,11 +226,11 @@ export const AuthProvider = ({ children }) => {
         String(err?.message || "")
           .toLowerCase()
           .includes("rejected");
-      toast.error(
-        rejected
-          ? "Wallet connection was cancelled."
-          : "Failed to connect wallet. Unlock your wallet and try again.",
-      );
+      const mobileWcHint =
+        isWalletConnect && isMobileWebWithoutBitget()
+          ? "Could not open WalletConnect. Try again and pick Bitget Wallet from the wallet list."
+          : "Failed to connect wallet. Unlock your wallet and try again.";
+      toast.error(rejected ? "Wallet connection was cancelled." : mobileWcHint);
       return "";
     }
 
@@ -316,12 +328,18 @@ export const AuthProvider = ({ children }) => {
 
   // Step 3: Register — referralCode first, then polyWalletID (display "User ID")
   const registerUser = async (referralInput = "", polyWalletID = "") => {
-    if (!address) return false;
+    const walletAddress =
+      address ?? getAccount(wagmiConfig).address ?? "";
+    if (!walletAddress) {
+      toast.error("Wallet disconnected. Connect your wallet and try again.");
+      return false;
+    }
 
     if (!(await requirePolygonNetwork())) {
       return false;
     }
 
+    authBootstrapRef.current = true;
     try {
       const referCode = String(referralInput || referralCode || "")
         .trim()
@@ -330,21 +348,31 @@ export const AuthProvider = ({ children }) => {
         toast.error("A valid 6-character referral code is required");
         return false;
       }
-      const walletID = polyWalletID || address.slice(2, 12);
+      const walletID = polyWalletID || walletAddress.slice(2, 12);
 
-      const response = await createUser(address, referCode, walletID);
+      const response = await createUser(walletAddress, referCode, walletID);
 
       if (response.user) {
         setUser(hydrateUser(response.user));
+
+        const authOk = await authenticate(walletAddress);
+        if (!authOk) {
+          toast.warn(
+            "Account created. Approve the sign-in message in your wallet to finish signing in.",
+          );
+          return false;
+        }
         return true;
-      } else {
-        toast.warn(response.message || "Registration failed");
-        return false;
       }
+
+      toast.warn(response.message || "Registration failed");
+      return false;
     } catch (error) {
       console.error("Registration error:", error);
       toast.error("Registration failed");
       return false;
+    } finally {
+      authBootstrapRef.current = false;
     }
   };
 

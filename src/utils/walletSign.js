@@ -32,10 +32,7 @@ function isUserRejected(error) {
   return msg.includes("rejected") || msg.includes("denied") || msg.includes("cancel");
 }
 
-export function isMobileBrowser() {
-  if (typeof navigator === "undefined") return false;
-  return /android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent);
-}
+export { isMobileBrowser } from "./device.js";
 
 export function isWalletConnectActive() {
   const connection = config.state.connections.get(config.state.current);

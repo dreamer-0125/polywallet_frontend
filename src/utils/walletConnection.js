@@ -2,7 +2,10 @@ import { disconnect, getAccount } from "@wagmi/core";
 import { polygon } from "wagmi/chains";
 import { config } from "../config/index.js";
 import { isBitgetProviderAvailable } from "./bitgetWallet.js";
-import { pickWalletConnector } from "./walletConnectors.js";
+import {
+  isMobileWebWithoutBitget,
+  pickWalletConnector,
+} from "./walletConnectors.js";
 import { CONNECTOR_KEYS } from "../config/wallets.js";
 
 export const NO_BITGET_WALLET_MSG = "No bitget wallet";

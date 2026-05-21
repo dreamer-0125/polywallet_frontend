@@ -20,7 +20,9 @@ apiClient.interceptors.response.use(
     const isAuthEndpoint =
       reqUrl.includes("/auth/session") ||
       reqUrl.includes("/auth/request-challenge") ||
-      reqUrl.includes("/auth/verify-signature");
+      reqUrl.includes("/auth/verify-signature") ||
+      reqUrl.includes("/user/create") ||
+      reqUrl.includes("/user/find");
     const hadResponse = !!error.response;
     // Only 401 = missing/invalid session. 403 is often business logic (e.g. insufficient balance).
     if (hadResponse && status === 401 && !isAuthEndpoint) {
