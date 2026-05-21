@@ -30,6 +30,7 @@ export const config = createConfig({
         };
       },
     }),
+    injected({ target: "metaMask" }),
     injected(),
     walletConnect({
       projectId: WALLETCONNECT_PROJECT_ID,

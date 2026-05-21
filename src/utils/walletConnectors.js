@@ -115,7 +115,9 @@ export async function pickWalletConnector(connectors) {
   }
 
   if (hasBitgetWallet()) {
-    const configured = list.find((c) => normalize(c.id) === "bitgetwallet");
+    const configured =
+      list.find((c) => normalize(c.id) === "bitget") ??
+      list.find((c) => normalize(c.id) === "bitgetwallet");
     if (configured) {
       return { connector: configured, isBitget: true };
     }

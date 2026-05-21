@@ -6,9 +6,7 @@ import Logo from "../assets/LOGO-black.svg";
 import { useLoadingContext } from "../context/LoadingContext";
 import { findUser } from "../api";
 import { toast } from "react-toastify";
-import WalletPickerModal from "../components/shared/WalletPickerModal";
 import { CONNECTOR_KEYS } from "../config/wallets.js";
-import { isBitgetProviderAvailable } from "../utils/bitgetWallet.js";
 
 export default function Landing() {
   const { setLoading } = useLoadingContext();
@@ -16,7 +14,6 @@ export default function Landing() {
   const { connectWallet, authenticate, setReferralCode, isAuthenticated } =
     useAuth();
   const [searchParams] = useSearchParams();
-  const [pickerOpen, setPickerOpen] = useState(false);
   const [connectBusy, setConnectBusy] = useState(false);
 
   useEffect(() => {
@@ -29,11 +26,11 @@ export default function Landing() {
     }
   }, [isAuthenticated, navigate]);
 
-  const runConnectFlow = async (connectorKey) => {
+  const handleConnect = async () => {
     setConnectBusy(true);
     setLoading(true);
     try {
-      const connectedAddress = await connectWallet(connectorKey);
+      const connectedAddress = await connectWallet(CONNECTOR_KEYS.bitget);
       if (!connectedAddress) {
         return;
       }
@@ -66,20 +63,7 @@ export default function Landing() {
     } finally {
       setConnectBusy(false);
       setLoading(false);
-      setPickerOpen(false);
     }
-  };
-
-  const handleOpenPicker = () => {
-    if (isBitgetProviderAvailable()) {
-      runConnectFlow(CONNECTOR_KEYS.bitget);
-      return;
-    }
-    setPickerOpen(true);
-  };
-
-  const handleSelectWallet = (key) => {
-    runConnectFlow(key || CONNECTOR_KEYS.bitget);
   };
 
   const init = useCallback(() => {
@@ -103,7 +87,7 @@ export default function Landing() {
         <div className="bg-white rounded-[32px] p-2 shadow-[0_20px_40px_-10px_rgba(0,0,0,0.05)] md:w-[400px] md:p-8">
           <button
             type="button"
-            onClick={handleOpenPicker}
+            onClick={handleConnect}
             disabled={connectBusy}
             className="w-full h-16 bg-[#0F1115] text-white rounded-[24px] font-bold text-lg flex items-center justify-center gap-2.5 hover:bg-black hover:scale-[1.01] active:scale-[0.98] transition-all shadow-lg disabled:opacity-70"
           >
@@ -117,13 +101,6 @@ export default function Landing() {
           <span>Secure & Encrypted</span>
         </div>
       </div>
-
-      <WalletPickerModal
-        open={pickerOpen}
-        onClose={() => !connectBusy && setPickerOpen(false)}
-        onSelect={handleSelectWallet}
-        busy={connectBusy}
-      />
     </div>
   );
 }

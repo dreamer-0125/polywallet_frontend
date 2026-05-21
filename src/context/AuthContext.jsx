@@ -27,10 +27,10 @@ import {
 import {
   safeConnect,
   resolveConnector,
-  shouldWarnNonBitget,
-  isBitgetConnectorActive,
+  resolvePreferredConnector,
+  NO_BITGET_WALLET_MSG,
 } from "../utils/walletConnection.js";
-import { CONNECTOR_KEYS, NON_BITGET_WARNING_MSG } from "../config/wallets.js";
+import { CONNECTOR_KEYS } from "../config/wallets.js";
 import { hydrateUser } from "../utils/userDisplay.js";
 import {
   getSignErrorMessage,
@@ -63,8 +63,6 @@ export const AuthProvider = ({ children }) => {
   const wrongChainNotifiedRef = useRef(null);
   const refreshInFlightRef = useRef(null);
   const mismatchCheckTimerRef = useRef(null);
-  const nonBitgetWarnedRef = useRef(false);
-
   const isAuthenticated = !!user?.id;
 
   useEffect(() => {
@@ -175,18 +173,31 @@ export const AuthProvider = ({ children }) => {
    * @param {string} [connectorKey] — CONNECTOR_KEYS.bitget | injected | walletConnect
    */
   const connectWallet = async (connectorKey = CONNECTOR_KEYS.bitget) => {
-    const connector = resolveConnector(connectors, connectorKey);
+    let connector = null;
+    let usedBitget = false;
+
+    if (connectorKey === CONNECTOR_KEYS.bitget) {
+      const picked = await resolvePreferredConnector(connectors);
+      connector = picked.connector;
+      usedBitget = picked.isBitget;
+      if (!usedBitget) {
+        toast.warn(NO_BITGET_WALLET_MSG);
+      }
+    } else {
+      connector = resolveConnector(connectors, connectorKey);
+    }
+
     if (!connector) {
-      toast.error("This wallet option is not available in your browser.");
+      toast.error(
+        "No wallet available. Install Bitget Wallet or MetaMask, or use WalletConnect.",
+      );
       return "";
     }
 
-    const isWalletConnect =
-      connectorKey === CONNECTOR_KEYS.walletConnect ||
-      connector.type === "walletConnect";
+    const isWalletConnect = connector.type === "walletConnect";
 
-    if (isWalletConnect) {
-      toast.info("Opening WalletConnect…");
+    if (isWalletConnect && !usedBitget) {
+      toast.info("Opening WalletConnect… choose your wallet app to continue.");
     }
 
     let connectedAddress = "";
@@ -214,17 +225,6 @@ export const AuthProvider = ({ children }) => {
     if (!connectedAddress) {
       toast.error("Failed to connect wallet");
       return "";
-    }
-
-    if (
-      shouldWarnNonBitget(connectorKey) &&
-      !isBitgetConnectorActive() &&
-      connectorKey === CONNECTOR_KEYS.walletConnect
-    ) {
-      if (!nonBitgetWarnedRef.current) {
-        nonBitgetWarnedRef.current = true;
-        toast.warn(NON_BITGET_WARNING_MSG, { autoClose: 6000 });
-      }
     }
 
     if (isWalletConnect) {

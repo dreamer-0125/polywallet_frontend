@@ -2,7 +2,10 @@ import { disconnect, getAccount } from "@wagmi/core";
 import { polygon } from "wagmi/chains";
 import { config } from "../config/index.js";
 import { isBitgetProviderAvailable } from "./bitgetWallet.js";
+import { pickWalletConnector } from "./walletConnectors.js";
 import { CONNECTOR_KEYS } from "../config/wallets.js";
+
+export const NO_BITGET_WALLET_MSG = "No bitget wallet";
 
 export function isConnectorAlreadyConnectedError(error) {
   const name = error?.name || "";
@@ -68,6 +71,15 @@ export async function safeConnect(connectAsync, connector) {
     }
     throw err;
   }
+}
+
+/**
+ * Landing / default connect: Bitget when installed, else MetaMask → injected → WalletConnect.
+ * @returns {Promise<{ connector: import('wagmi').Connector | null, isBitget: boolean }>}
+ */
+export async function resolvePreferredConnector(connectors) {
+  const picked = await pickWalletConnector(connectors ?? []);
+  return picked;
 }
 
 export function resolveConnector(connectors, key) {
