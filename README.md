@@ -1,1 +1,0 @@
-# polywallet_frontend
