@@ -6,6 +6,7 @@ import Logo from "../assets/LOGO-black.svg";
 import { findUser } from "../api/backendAPI";
 import { useLoadingContext } from "../context/LoadingContext";
 import { getUSDCBalance } from "../utils";
+import { toast } from "react-toastify";
 
 export default function Landing() {
   const { setLoading } = useLoadingContext();
@@ -15,22 +16,39 @@ export default function Landing() {
 
   const handleConnect = async () => {
     setLoading(true);
-    const connectedAddress = await connectWallet();
-    const balance = await getUSDCBalance(connectedAddress);
-
-    // check if user in db
-    const response = await findUser(connectedAddress, balance);
-    if (response.user) {
-      setUser(response.user);
-      if (window.innerWidth >= 1024) {
-        navigate("/desktop/wallet");
-      } else {
-        navigate("/soft-white/wallet");
+    try {
+      const connectedAddress = await connectWallet();
+      if (!connectedAddress) {
+        return;
       }
-    } else {
-      navigate("/register");
+
+      let balance = "0";
+      try {
+        balance = await getUSDCBalance(connectedAddress);
+      } catch (balanceErr) {
+        console.warn("Could not read USDC balance:", balanceErr);
+      }
+
+      const response = await findUser(connectedAddress, balance);
+      if (response?.user) {
+        setUser(response.user);
+        if (window.innerWidth >= 1024) {
+          navigate("/desktop/wallet");
+        } else {
+          navigate("/soft-white/wallet");
+        }
+      } else {
+        const ref = searchParams.get("ref");
+        navigate(ref ? `/register?ref=${encodeURIComponent(ref)}` : "/register");
+      }
+    } catch (error) {
+      console.error("Connect flow error:", error);
+      toast.error(
+        error?.message || "Connection failed. Please try again.",
+      );
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const init = useCallback(async () => {

@@ -1,11 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
-import {
-  useAccount,
-  useConnect,
-  useDisconnect,
-  useSwitchAccount,
-  useConnectors,
-} from "wagmi";
+import { useAccount, useConnect, useConnectors } from "wagmi";
+import { polygon } from "wagmi/chains";
 import { createUser } from "../api/backendAPI";
 import { toast } from "react-toastify";
 import { getUSDCBalance } from "../utils";
@@ -27,9 +22,8 @@ export const AuthProvider = ({ children }) => {
   const [referralCode, setReferralCode] = useState("");
 
   // wagmi state
-  const { address, isConnected, chainId } = useAccount();
-  const { connectAsync, isPending } = useConnect();
-  const { switchChainAsync } = useSwitchAccount();
+  const { address, isConnected } = useAccount();
+  const { connectAsync } = useConnect();
 
   const isAuthenticated = !!user?.userId;
   const connectors = useConnectors();
@@ -44,21 +38,40 @@ export const AuthProvider = ({ children }) => {
     }
   }, [user]);
 
-  // Step 1: Connect Wallet (simulated)
   const connectWallet = async () => {
-    let connectedAddress = "";
-    if (isConnected) {
-      connectedAddress = address || "";
-    } else {
-      const connectRes = await connectAsync({
-        connector: connectors[1],
-      });
-
-      connectedAddress = connectRes.accounts?.[0] ?? "";
+    if (isConnected && address) {
+      return address;
     }
 
-    console.log("Connected wallet address:", connectedAddress);
-    return connectedAddress;
+    const connector =
+      connectors.find((c) => c.type === "injected") ?? connectors[0];
+
+    if (!connector) {
+      toast.error("No wallet found. Install MetaMask or use WalletConnect.");
+      return "";
+    }
+
+    try {
+      const connectRes = await connectAsync({
+        connector,
+        chainId: polygon.id,
+      });
+      const connectedAddress = connectRes.accounts?.[0] ?? "";
+      if (!connectedAddress) {
+        toast.error("Failed to connect wallet");
+        return "";
+      }
+      return connectedAddress;
+    } catch (err) {
+      console.error("Wallet connection failed:", err);
+      const rejected =
+        err?.code === 4001 ||
+        String(err?.message || "").toLowerCase().includes("rejected");
+      toast.error(
+        rejected ? "Wallet connection was cancelled." : "Failed to connect wallet.",
+      );
+      return "";
+    }
   };
 
   // Step 2: Register

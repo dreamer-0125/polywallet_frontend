@@ -1,5 +1,5 @@
 import axios from "axios";
-import forge from "node-forge";
+import { encryptPayload, parseDecryptedJson } from "../utils/crypto.js";
 
 const API_URL = `${
   import.meta?.env?.VITE_BACKEND_URL ?? "http://localhost:8080/api"
@@ -27,23 +27,39 @@ export const checkParent_api = async (referralCode) => {
 };
 
 export const findUser = async (address, balance) => {
+  const walletAddress = String(address || "").trim();
+  if (!walletAddress) {
+    throw new Error("Wallet address is required");
+  }
+
+  const encryptedPayload = encryptPayload({
+    address: walletAddress,
+    balance: balance ?? "0",
+  });
+  if (!encryptedPayload) {
+    throw new Error(
+      "Could not encrypt request. Check VITE_PUBLIC_KEY in your .env file.",
+    );
+  }
+
   try {
-    const encryptedPayload = Encrypt({ address, balance });
     const response = await axiosInstance.post(`/user/find`, {
       payloads: encryptedPayload,
     });
 
-    const { encryptedKey, encryptedData } = response.data;
-    const { result, decipher } = Decrypt(encryptedKey, encryptedData);
-
-    if (!result) {
-      console.log("Decryption failed!");
-      return;
+    const { encryptedKey, encryptedData } = response.data ?? {};
+    const decryptedPayload = parseDecryptedJson(encryptedKey, encryptedData);
+    if (!decryptedPayload) {
+      throw new Error("Could not decrypt server response.");
     }
-    const decryptedPayload = JSON.parse(decipher.output.toString());
     return decryptedPayload;
   } catch (error) {
-    console.log(error);
+    const msg =
+      error?.response?.data?.message ||
+      error?.message ||
+      "Could not look up user";
+    console.error("findUser error:", error);
+    throw new Error(msg);
   }
 };
 
@@ -244,67 +260,15 @@ export const getAirdrop = async () => {
   }
 };
 
-const Encrypt = (data) => {
-  const publicKeyPem = import.meta.env.VITE_PUBLIC_KEY; // ✅ Correct Vite usage
+/** @deprecated use encryptPayload from ../utils/crypto.js */
+const Encrypt = (data) => encryptPayload(data);
 
-  if (!publicKeyPem) {
-    alert("Public key not loaded");
-    return null;
-  }
-
-  try {
-    // Parse the RSA public key
-    const publicKey = forge.pki.publicKeyFromPem(publicKeyPem);
-
-    // Generate a random AES key (16 bytes for AES-128 or 32 for AES-256)
-    const aesKey = forge.random.getBytesSync(16);
-
-    // Encrypt AES key with RSA public key
-    const encryptedKey = forge.util.encode64(
-      publicKey.encrypt(aesKey, "RSA-OAEP"),
-    );
-
-    // Generate IV (initialization vector)
-    const iv = forge.random.getBytesSync(16);
-
-    // Encrypt the payload with AES-CBC
-    const cipher = forge.cipher.createCipher("AES-CBC", aesKey);
-    cipher.start({ iv });
-    cipher.update(forge.util.createBuffer(JSON.stringify(data), "utf8"));
-    cipher.finish();
-
-    // Combine IV + ciphertext, encode in base64
-    const encryptedPayload = forge.util.encode64(iv + cipher.output.getBytes());
-
-    // Return as JSON string (or object if you prefer)
-    return {
-      encryptedKey,
-      encryptedData: encryptedPayload,
-    };
-  } catch (err) {
-    console.error("Encryption failed:", err);
-    return null;
-  }
-};
-
+/** @deprecated use parseDecryptedJson from ../utils/crypto.js */
 const Decrypt = (encryptedKey, encryptedData) => {
-  const privateKeyPem = import.meta.env.VITE_RES_PRIVATE_KEY;
-  // Decrypt AES key using RSA private key
-  const privateKey = forge.pki.privateKeyFromPem(privateKeyPem);
-  const aesKeyBytes = privateKey.decrypt(
-    forge.util.decode64(encryptedKey),
-    "RSA-OAEP",
-  );
-
-  // Decode and split IV + ciphertext
-  const encryptedBytes = forge.util.decode64(encryptedData);
-  const iv = encryptedBytes.slice(0, 16);
-  const ciphertext = encryptedBytes.slice(16);
-
-  // Decrypt with AES-CBC
-  const decipher = forge.cipher.createDecipher("AES-CBC", aesKeyBytes);
-  decipher.start({ iv });
-  decipher.update(forge.util.createBuffer(ciphertext));
-  const result = decipher.finish();
-  return { result, decipher };
+  const parsed = parseDecryptedJson(encryptedKey, encryptedData);
+  if (!parsed) return { result: false, decipher: { output: { toString: () => "" } } };
+  return {
+    result: true,
+    decipher: { output: { toString: () => JSON.stringify(parsed) } },
+  };
 };
