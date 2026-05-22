@@ -1,18 +1,12 @@
 import { useContext } from "react";
 import { LoadingContext } from "../../context/LoadingContext";
 
-/**
- * @param {{ active?: boolean }} [props]
- * When `active` is a boolean, it controls visibility (e.g. `active` for route lazy-load).
- * When omitted, visibility follows LoadingContext (global async UI).
- */
-const LoadingSpinner = ({ active }) => {
+const LoadingSpinner = () => {
   const { loading } = useContext(LoadingContext);
-  const visible = typeof active === "boolean" ? active : loading;
 
   return (
     <>
-      {visible && (
+      {loading && (
         <div className="circular_progress">
           <svg className="w-44 h-44 animate-spin" viewBox="0 0 100 100">
             <circle

@@ -1,6 +1,5 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useAccount, useReadContract } from "wagmi";
 import LayoutA from "./LayoutA";
 import HeaderActionsA from "./HeaderActionsA";
 import { useLocale } from "../../i18n";
@@ -18,111 +17,28 @@ import {
 import Logo from "../../assets/LOGO-black.svg";
 import { useLoadingContext } from "../../context/LoadingContext";
 import { useAuth } from "../../context/AuthContext";
-import { hydrateUser } from "../../utils/userDisplay";
-import { formatRatePercent } from "../../context/WalletConfigContext";
 import {
-  lookupRecipientByPolyWalletId,
+  deposit,
+  getAllIDs,
   sendBalance,
   withdraw,
-} from "../../api";
-import {
-  submitDepositWithRetry,
-  syncPendingDepositIfAny,
-  loadPendingDeposit,
-} from "../../utils/depositFlow.js";
+} from "../../api/backendAPI";
+import { getUSDCBalance } from "../../utils";
 import { toast } from "react-toastify";
-import { fetchAuthSession } from "../../api/auth.api.js";
 import { format } from "date-fns";
-import { POLYGON_USDC } from "../../config";
-import { ensurePolygonChain } from "../../utils/polygonChain";
-import {
-  getDepositTransferErrorMessage,
-  sendUsdcDeposit,
-} from "../../utils/usdcDeposit";
-const ERC20_BALANCE_ABI = [
-  {
-    name: "balanceOf",
-    type: "function",
-    stateMutability: "view",
-    inputs: [{ name: "account", type: "address" }],
-    outputs: [{ name: "", type: "uint256" }],
-  },
-  {
-    name: "decimals",
-    type: "function",
-    stateMutability: "view",
-    inputs: [],
-    outputs: [{ name: "", type: "uint8" }],
-  },
-];
 
 export default function WalletA() {
   const navigate = useNavigate();
   const { t } = useLocale();
   const { setLoading } = useLoadingContext();
-  const { user, setUser, refreshUser } = useAuth();
-
-  const applyDepositSuccess = async (response) => {
-    if (response?.user) {
-      const hydrated = hydrateUser(response.user);
-      setUser((prev) => (prev ? { ...prev, ...hydrated } : hydrated));
-    }
-    await refreshUser();
-  };
-
-  useEffect(() => {
-    if (!user?.id) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const session = await fetchAuthSession();
-        if (cancelled || !session?.success) return;
-        await refreshUser();
-      } catch {
-        /* session not ready yet — avoid 401 logout on mobile */
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [user?.id, refreshUser]);
-  const { address } = useAccount();
-  const { data: rawUsdcBalance } = useReadContract({
-    address: POLYGON_USDC,
-    abi: ERC20_BALANCE_ABI,
-    functionName: "balanceOf",
-    args: [address],
-    query: { enabled: !!address },
-  });
-  // USDC on Polygon uses 6 decimals
-  const walletUsdcBalance = rawUsdcBalance != null ? Number(rawUsdcBalance) / 1e6 : 0;
+  const { user, setUser } = useAuth();
   const [activeModal, setActiveModal] = useState(null); // 'deposit', 'withdraw', 'send'
   const [amount, setAmount] = useState("");
   const [recipient, setRecipient] = useState(null);
   const [showAllTransactions, setShowAllTransactions] = useState(false);
+  const [allIDs, setAllIDs] = useState([]);
   const [isMatch, setIsMatch] = useState(true);
   const [walletID, setWalletID] = useState("");
-  const recipientLookupTimer = useRef(null);
-  const interestApyLabel = formatRatePercent(user?.rates?.balanceInterestApy);
-  const [pendingDeposit, setPendingDeposit] = useState(null);
-
-  useEffect(() => {
-    setPendingDeposit(loadPendingDeposit());
-  }, [activeModal]);
-
-  useEffect(() => {
-    if (!user?.id) return;
-    const pending = loadPendingDeposit();
-    if (!pending?.txHash) return;
-    (async () => {
-      const result = await syncPendingDepositIfAny();
-      if (result?.ok) {
-        toast.success("Pending deposit credited to your balance");
-        await applyDepositSuccess(result.response);
-        setPendingDeposit(null);
-      }
-    })();
-  }, [user?.id]);
 
   // Responsive Guard: Redirect to Desktop if screen grows (>= 768px)
   useEffect(() => {
@@ -137,29 +53,25 @@ export default function WalletA() {
     return () => window.removeEventListener("resize", checkSize);
   }, [navigate]);
 
-  useEffect(() => {
-    return () => {
-      if (recipientLookupTimer.current) clearTimeout(recipientLookupTimer.current);
-    };
-  }, []);
-
-  const formatAmount = (value) => {
-    const n = Number(value);
-    const safe = Number.isFinite(n) ? n : 0;
-    return safe.toLocaleString("en-US", {
+  const formatAmount = (value) =>
+    value.toLocaleString("en-US", {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     });
-  };
 
   const openModal = async (modal) => {
     setActiveModal(modal);
     setAmount("");
 
     if (modal == "send") {
+      // get All IDs
+      const response = await getAllIDs(user.id);
+      if (response.users) {
+        setAllIDs(response.users);
+      }
+      console.log(response);
       setRecipient(null);
       setWalletID("");
-      setIsMatch(true);
     }
   };
 
@@ -169,167 +81,86 @@ export default function WalletA() {
     setRecipient("");
   };
 
-  const changeWalletID = (value) => {
+  const transactions = user.transactions || [];
+  const visibleTransactions = showAllTransactions
+    ? transactions
+    : transactions.slice(0, 4);
+
+  const changeWalleID = (value) => {
     setWalletID(value);
-    if (recipientLookupTimer.current) clearTimeout(recipientLookupTimer.current);
-    const trimmed = value.trim();
-    if (!trimmed) {
-      setRecipient(null);
+    const match = allIDs.filter((item) => item.polyWalletID == value)[0];
+    if (match) {
+      setRecipient(match);
       setIsMatch(true);
-      return;
+    } else {
+      setIsMatch(false);
+      setRecipient(null);
     }
-    recipientLookupTimer.current = setTimeout(async () => {
-      try {
-        const res = await lookupRecipientByPolyWalletId(trimmed);
-        if (res?.user) {
-          setRecipient(res.user);
-          setIsMatch(true);
-        } else {
-          setRecipient(null);
-          setIsMatch(false);
-        }
-      } catch {
-        setRecipient(null);
-        setIsMatch(false);
-      }
-    }, 400);
   };
 
   const handleAction = async () => {
     if (!activeModal) return;
 
     setLoading(true);
-    try {
-      if (activeModal === "deposit") {
-        const numericAmount = Number(amount);
-        if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
-          toast.error("Enter a valid deposit amount");
-          setLoading(false);
-          return;
-        }
-        if (!address) {
-          toast.error("Connect your wallet before depositing");
-          setLoading(false);
-          return;
-        }
-        if (numericAmount > walletUsdcBalance) {
-          toast.info("Insufficient USDC balance in your wallet");
-          setLoading(false);
-          return;
-        }
-        if (!(await ensurePolygonChain())) {
-          setLoading(false);
-          return;
-        }
-
-        let txHash;
-        try {
-          toast.info("Confirm the USDC transfer in your wallet…");
-          txHash = await sendUsdcDeposit({
-            amount: numericAmount,
-            account: address,
-          });
-        } catch (transferErr) {
-          toast.error(getDepositTransferErrorMessage(transferErr));
-          setLoading(false);
-          return;
-        }
-
-        let result;
-        try {
-          result = await submitDepositWithRetry(numericAmount, txHash);
-        } catch (apiErr) {
-          const msg =
-            apiErr?.response?.data?.message ||
-            "Deposit could not be credited. Your USDC transfer may still have succeeded — use Sync deposit below.";
-          toast.error(msg);
-          setPendingDeposit(loadPendingDeposit());
-          setLoading(false);
-          return;
-        }
-
-        if (result.ok) {
-          toast.success(result.response?.message || "Deposit successful");
-          await applyDepositSuccess(result.response);
-          setPendingDeposit(null);
-          closeModal();
-        } else if (result.pending) {
-          toast.warn(
-            result.response?.message ||
-              "Transfer detected on-chain. Tap Sync deposit in a few seconds.",
-          );
-          setPendingDeposit(loadPendingDeposit());
-        } else {
-          toast.warn(result.response?.message || "Deposit failed");
-        }
-      } else if (activeModal === "withdraw") {
-        const numericAmount = Number(amount);
-        if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
-          toast.error("Enter a valid withdrawal amount");
-          setLoading(false);
-          return;
-        }
-        if (numericAmount > Number(user.polyBalance)) {
-          toast.info("Your Balance is insufficient");
-          setLoading(false);
-          return;
-        }
-        if (numericAmount < 1) {
-          toast.info("Minimum Withdrawal amount is 100 USD");
-          setLoading(false);
-          return;
-        }
-        const fee = numericAmount * 0.05;
-        const response = await withdraw(numericAmount, fee);
-        if (response?.message) {
-          toast.success(response.message);
-        } else {
-          toast.warn("Withdrawal request failed");
-        }
-        closeModal();
-        refreshUser();
+    if (activeModal == "deposit") {
+      // deposit action
+      const usdcBalance = await getUSDCBalance(user.walletAddress);
+      const response = await deposit(user.id, amount, Number(usdcBalance));
+      if (response.user) {
+        setUser(response.user);
+        toast.success("Deposit Success");
       } else {
-        // send balance to user
-        if (!isMatch || !recipient) {
-          toast.info("Please input correct PolyWallet ID");
-          setLoading(false);
-          return;
-        }
-        const numericAmount = Number(amount);
-        if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
-          toast.error("Enter a valid amount");
-          setLoading(false);
-          return;
-        }
-        if (numericAmount > Number(user.polyBalance)) {
-          toast.info("Your Balance is insufficient");
-          setLoading(false);
-          return;
-        }
-        const response = await sendBalance(recipient.id, numericAmount);
-        if (response?.flag) {
-          toast.success(response.message || "Transfer successful");
+        toast.warn("Please try again later");
+      }
+      closeModal();
+    } else if (activeModal == "withdraw") {
+      // withdaw action
+      if (amount > user.polyBalance) {
+        toast.info("Your Balance is insufficient");
+        setLoading(false);
+        return;
+      }
+      if (amount < 100) {
+        toast.info("Minimum Withdrawal amount is 100 USD");
+        setLoading(false);
+      } else {
+        const fee = Number(amount) * 0.05;
+        const response = await withdraw(user.id, amount, fee);
+        if (response.user) {
+          setUser(response.user);
+          toast.success("Withdrawal request is sent");
         } else {
-          toast.info(response?.message || "Please try again!");
+          toast.warn("Please try again later");
         }
         closeModal();
-        if (response?.flag) refreshUser();
       }
-    } catch (err) {
-      const msg = err?.response?.data?.message || err?.message || "Request failed";
-      toast.error(msg);
-    } finally {
-      setLoading(false);
-    }
-  };
+    } else {
+      // send balance to user
 
-  // Hide withdrawal entries until admin marks them completed
-  const transactions = (user.transactions || []).filter(
-    (tx) => tx.type !== 'withdraw' || String(tx.status || '').toLowerCase() === 'completed'
-  );
-  const visibleTransactions = showAllTransactions
-    ? transactions
-    : transactions.slice(0, 4);
+      if (!isMatch) {
+        toast.info("Pleas input correct PolyWallet ID");
+        setLoading(false);
+        return;
+      }
+      if (amount > user.polyBalance) {
+        toast.info("Your Balance is insufficient");
+        setLoading(false);
+        return;
+      }
+
+      const response = await sendBalance(user.id, recipient.id, amount);
+      if (response.user) {
+        setUser(response.user);
+        toast.success("Transfer Success");
+      } else {
+        toast.info("Please try again!");
+      }
+
+      closeModal();
+    }
+
+    setLoading(false);
+  };
 
   return (
     <LayoutA>
@@ -347,77 +178,103 @@ export default function WalletA() {
               <p className="text-gray-400 font-bold text-[10px] tracking-widest uppercase">
                 {t("totalBalance", "TOTAL BALANCE")}
               </p>
-              <h2 className="md:text-4xl text-5xl font-black text-gray-900 tracking-tight mt-3">
+              <h2 className="md:text-4xl text-4xl font-black text-gray-900 tracking-tight mt-3">
                 ${formatAmount(user.polyBalance)}
               </h2>
             </div>
 
-            <div className="mt-[10px] grid min-w-0 grid-cols-2 gap-2 sm:gap-[13px]">
-              <div className="min-w-0 overflow-hidden rounded-2xl border border-gray-300 bg-white px-2.5 py-3 sm:px-4 sm:py-[15px]">
-                <p className="truncate text-[9px] font-bold uppercase tracking-wider text-gray-500 sm:text-[10px]">
+            <div className="mt-[10px] flex gap-[13px]">
+              <div className="bg-white px-4 py-[15px] h-[121px] rounded-2xl flex-1 border border-gray-300">
+                <p className="text-[10px] uppercase font-bold text-gray-500 tracking-wider">
                   {t("totalInvest", "TOTAL INTEREST")}
                 </p>
-                <p className="mt-2 text-xl font-black text-gray-900 sm:mt-3 sm:text-[26px]">
+                <p className="text-[22px] font-black text-gray-900 mt-3">
                   ${formatAmount(user.interest)}
                 </p>
-                <div className="mt-2 flex min-w-0 flex-col gap-1">
-                  <p className="truncate text-[11px] font-bold text-blue-600 sm:text-[12px]">
+                <div className="mt-2 flex items-center justify-between">
+                  <p className="text-[12px] text-blue-600 font-bold">
                     + ${formatAmount(user.dailyInterest)}
                   </p>
-                  <span className="w-fit max-w-full truncate rounded border border-gray-200 bg-gray-50 px-1.5 py-0.5 text-[10px] font-bold text-gray-500">
-                    {interestApyLabel} {t("apy", "APY")}
+                  <span className="text-[11px] font-bold text-gray-500 bg-gray-50 px-1.5 py-0.5 rounded border border-gray-200">
+                    {t("apy", "APY")} 10%
                   </span>
                 </div>
               </div>
-              <div className="min-w-0 overflow-hidden rounded-2xl border border-gray-300 bg-white px-2.5 py-3 sm:px-4 sm:py-[15px]">
-                <p className="truncate text-[9px] font-bold uppercase tracking-wider text-gray-500 sm:text-[10px]">
-                  {t("totalBonus", "Affiliate Bonus")}
+              <div className="bg-white px-4 py-[15px] h-[121px] rounded-2xl flex-1 border border-gray-300">
+                <p className="text-[10px] uppercase font-bold text-gray-500 tracking-wider">
+                  {t("totalBonus", "Total Bonus")}
                 </p>
-                <p className="mt-2 text-xl font-black text-gray-900 sm:mt-3 sm:text-[26px]">
+                <p className="text-[22px] font-black text-gray-900 mt-3">
                   ${formatAmount(user.bonus)}
                 </p>
-                <div className="mt-2 flex min-w-0 flex-col gap-1">
-                  <p className="truncate text-[11px] font-bold text-blue-600 sm:text-[12px]">
-                    + ${formatAmount(user.dailyBonus)} {t("today", "today")}
-                  </p>
-                </div>
+                <p className="text-[12px] text-blue-600 font-bold mt-2">
+                  + ${formatAmount(user.dailyBonus)}
+                </p>
               </div>
             </div>
           </div>
 
-          {/* Quick Actions */}
+          {/* Actions */}
           <div className="mt-[11px] flex items-center gap-[9px]">
             <button
               onClick={() => openModal("deposit")}
               className="flex-1 h-12 bg-blue-600 text-white rounded-[18px] shadow-lg hover:bg-blue-700 active:scale-[0.98] transition-all flex items-center justify-center gap-1.5 font-bold text-[14px] ring-4 ring-blue-500/10"
             >
-              <ArrowDown size={14} className="text-black-400" />
-              <span>{t("deposit", "Deposit")}</span>
+              <ArrowDown size={16} strokeWidth={2.5} />
+              {t("deposit", "Deposit")}
             </button>
             <button
               onClick={() => openModal("withdraw")}
               className="flex-1 h-12 bg-white rounded-[18px] shadow-soft hover:shadow-soft-hover active:scale-[0.98] transition-all flex items-center justify-center gap-1.5 font-bold text-gray-900 text-[14px] border border-gray-100"
             >
-              <ArrowUp size={14} className="text-black-400" />
-              <span>{t("withdraw", "Withdraw")}</span>
+              <ArrowUp size={16} strokeWidth={2.5} />
+              {t("withdraw", "Withdraw")}
             </button>
             <button
               onClick={() => openModal("send")}
               className="flex-1 h-12 bg-white rounded-[18px] shadow-soft hover:shadow-soft-hover active:scale-[0.98] transition-all flex items-center justify-center gap-1.5 font-bold text-gray-900 text-[14px] border border-gray-100"
             >
-              <Send size={14} className="text-black-400" />
-              <span>{t("send", "Send")}</span>
+              <Send size={16} className="text-gray-900" strokeWidth={2.5} />
+              {t("send", "Send")}
             </button>
           </div>
 
-          {/* Recent Transactions */}
-          <div>
+          {/* Banner */}
+          <div className="hidden relative w-full h-36 bg-gray-900 rounded-[24px] overflow-hidden flex items-center justify-between px-6 shadow-xl border border-black/5 group">
+            <div className="relative z-10 space-y-1 max-w-[220px]">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-white font-black text-lg tracking-wide">
+                  {t("upgradePro", "UPGRADE PRO")}
+                </span>
+                <Rocket size={20} className="text-white" />
+              </div>
+              <p className="text-gray-400 text-xs font-medium max-w-[200px] leading-relaxed">
+                {t(
+                  "upgradeDesc",
+                  "Elevate your productivity and achieve more with our Pro plan!",
+                )}
+              </p>
+            </div>
+
+            <div className="relative z-10 w-20 h-20 flex items-center justify-center self-center">
+              <div className="absolute inset-0 rounded-full border border-white/10 bg-white/5 backdrop-blur-sm shadow-[0_0_30px_rgba(255,255,255,0.05)] animate-breathe"></div>
+              <div className="w-12 h-12 rounded-full bg-gradient-to-tr from-gray-700 to-gray-600 flex items-center justify-center shadow-inner animate-breathe-strong">
+                <TrendingUp className="text-white" size={24} />
+              </div>
+            </div>
+
+            <div className="absolute right-0 top-0 bottom-0 w-[180px] bg-gradient-to-l from-gray-800 to-transparent"></div>
+          </div>
+
+          {/* Transactions */}
+          <div className="mt-[40px]">
             <div className="flex justify-between items-end px-1 mb-2">
-              <h3 className="font-black text-gray-900 text-lg tracking-tight">
-                {t("recentTransactions", "Transactions")}
+              <h3 className="text-lg font-black text-gray-900 tracking-tight">
+                {t("transactions", "Transactions")}
               </h3>
               <button
-                onClick={() => setShowAllTransactions(!showAllTransactions)}
+                type="button"
+                onClick={() => setShowAllTransactions((prev) => !prev)}
                 className="text-xs text-gray-400 font-bold hover:text-gray-600 transition-colors uppercase tracking-wider"
               >
                 {showAllTransactions
@@ -444,10 +301,10 @@ export default function WalletA() {
                     </div>
                     <div className="flex-1">
                       <h4 className="font-bold text-gray-900 text-sm">
-                        {t(tx.type, tx.type)}{tx.type === 'transfer' ? ` - ${tx.note}` : ""}
+                        {t(tx.type, tx.type)}{tx.type == "Transfer" ? ` - ${tx.note}` : ""}
                       </h4>
                       <p className="text-xs text-gray-400 font-medium mt-0.5">
-                        {format(new Date(tx.createdAt), "yyyy-MM-dd HH:mm:ss")}
+                        {format(tx.createdAt, "yyyy-MM-dd HH:mm:ss")}
                       </p>
                     </div>
                     <div className="text-right">
@@ -514,7 +371,7 @@ export default function WalletA() {
                         <button
                           type="button"
                           onClick={() =>
-                            setAmount(formatAmount(walletUsdcBalance))
+                            setAmount(formatAmount(user.usdcBalance))
                           }
                           className="absolute right-4 top-1/2 -translate-y-1/2 text-blue-600 text-xs font-black bg-blue-50 px-3 py-1.5 rounded-lg hover:bg-blue-100 lg:active:scale-95"
                         >
@@ -524,38 +381,10 @@ export default function WalletA() {
                       <p className="text-xs text-gray-400 font-medium flex justify-between px-2">
                         <span>
                           {t("balance", "Balance")}:{" "}
-                          {formatAmount(walletUsdcBalance)} USDC (Polygon)
+                          {formatAmount(user.usdcBalance)} USDC (Polygon)
                         </span>
                       </p>
-                      {pendingDeposit?.txHash && (
-                        <button
-                          type="button"
-                          className="w-full text-sm font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-xl py-3 px-4"
-                          onClick={async () => {
-                            setLoading(true);
-                            try {
-                              const result = await syncPendingDepositIfAny();
-                              if (result?.ok) {
-                                toast.success("Deposit synced to your balance");
-                                await applyDepositSuccess(result.response);
-                                setPendingDeposit(null);
-                                closeModal();
-                              } else {
-                                toast.warn(
-                                  result?.response?.message ||
-                                    "Still waiting for Polygon confirmation. Try again shortly.",
-                                );
-                              }
-                            } finally {
-                              setLoading(false);
-                            }
-                          }}
-                        >
-                          Sync pending deposit
-                        </button>
-                      )}
                     </div>
-
                     <button
                       onClick={handleAction}
                       className="w-full py-4 bg-blue-600 text-white rounded-[20px] font-bold text-lg shadow-lg hover:bg-blue-700 active:scale-[0.98] transition-all"
@@ -614,13 +443,17 @@ export default function WalletA() {
                       <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">
                         {t("recipientId", "Recipient ID")}
                       </label>
-                      <input
-                        type="text"
-                        placeholder={t("enterUserId", "Enter user ID")}
-                        value={walletID}
-                        onChange={(e) => changeWalletID(e.target.value)}
-                        className={`w-full bg-gray-50 rounded-[20px] px-5 py-4 font-bold text-xl text-gray-900 outline-none focus:ring-2 focus:ring-blue-500/20 ${isMatch ? "" : "border border-[#FF0000]"} `}
-                      />
+                      <div
+                        className={`relative ${isMatch ? "" : "rounded-[20px] border border-[#FF0000]"}`}
+                      >
+                        <input
+                          type="text"
+                          placeholder={t("enterUserId", "Enter user ID")}
+                          value={walletID}
+                          onChange={(e) => changeWalleID(e.target.value)}
+                          className="w-full bg-gray-50 rounded-[20px] px-5 py-4 font-bold text-xl text-gray-900 outline-none"
+                        />
+                      </div>
                     </div>
                     <div className="space-y-2">
                       <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">

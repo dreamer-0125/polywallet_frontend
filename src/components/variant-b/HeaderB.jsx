@@ -35,12 +35,6 @@ export default function HeaderB({ title = "PolyWallet" }) {
         setShowWalletMenu(false);
     };
 
-    const handleDisconnect = async () => {
-        setShowWalletMenu(false);
-        await logout();
-        navigate('/');
-    };
-
     return (
         <div className="flex justify-between items-center px-1 mb-3">
             {/* Logo Section replacing Greeting/Title */}
@@ -81,7 +75,11 @@ export default function HeaderB({ title = "PolyWallet" }) {
                         </div>
                         <button
                             type="button"
-                            onClick={handleDisconnect}
+                            onClick={() => {
+                                setShowWalletMenu(false);
+                                logout();
+                                navigate('/');
+                            }}
                             className="w-full px-4 py-3 flex items-center gap-2 text-sm font-semibold text-red-400 hover:bg-white/5 transition-colors"
                         >
                             <Power size={16} />

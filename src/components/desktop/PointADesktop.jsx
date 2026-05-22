@@ -12,29 +12,26 @@ import {
 } from "lucide-react";
 import { useLocale } from "../../i18n";
 import { useAuth } from "../../context/AuthContext";
-import { getAirdrop } from "../../api";
-import { useWalletConfig, formatRatePercent } from "../../context/WalletConfigContext";
+import { getAirdrop } from "../../api/backendAPI";
+import { RankData } from "../../config/data.config";
 import { useLoadingContext } from "../../context/LoadingContext";
 
 export default function PointADesktop() {
   const { t } = useLocale();
-  const formatNumber = (value) => {
-    const n = Number(value);
-    const safe = Number.isFinite(n) ? n : 0;
-    return safe.toLocaleString("en-US");
-  };
+  const formatNumber = (value) => value.toLocaleString("en-US");
   const { user } = useAuth();
-  const { getRankStats } = useWalletConfig();
   const { setLoading } = useLoadingContext();
-  const pointApyLabel = formatRatePercent(
-    user?.rates?.pointApy ?? getRankStats(user?.rank).pointApy
-  );
   const [airdropData, setAirdropData] = useState([]);
 
   const init = useCallback(async () => {
     setLoading(true);
-    const response = await getAirdrop();
-    setAirdropData(response.airdropData ?? []);
+    const response = await getAirdrop(user.id);
+
+    if (response.airdropData) {
+      const data = JSON.parse(response.airdropData);
+      console.log(data);
+      setAirdropData(data);
+    }
     setLoading(false);
   }, []);
 
@@ -60,8 +57,8 @@ export default function PointADesktop() {
     },
     {
       icon: MessageCircle,
-      color: "bg-amber-50 text-amber-400",
-      iconBg: "bg-amber-100",
+      color: "bg-gray-50 text-gray-400",
+      iconBg: "bg-gray-100",
       disabled: true,
     },
   ];
@@ -118,7 +115,7 @@ export default function PointADesktop() {
                 <div className="flex items-center gap-2 text-white mb-1">
                   <Zap size={16} fill="currentColor" />
                   <span className="text-sm font-bold uppercase">
-                    {pointApyLabel} APY
+                    {RankData[user.rank].pointApy * 100}% APY
                   </span>
                 </div>
                 <p className="text-xs text-white/80 font-medium">
@@ -129,14 +126,12 @@ export default function PointADesktop() {
           </div>
         </div>
 
+        {/* Projects List - SAME AS MOBILE */}
         <div className="space-y-4">
           <div className="flex justify-between items-end px-1">
             <h3 className="text-lg font-black text-gray-900 tracking-tight">
               {t("supportedProjects", "Supported Projects")}
             </h3>
-            <span className="text-[10px] font-bold text-gray-400 uppercase">
-              {airdropData.filter((p) => p.isActive).length} active
-            </span>
           </div>
 
           <div className="grid gap-3">
@@ -146,7 +141,7 @@ export default function PointADesktop() {
               return (
                 <div
                   key={i}
-                  className={`group relative p-4 rounded-[26px] flex items-center gap-4 transition-all duration-300 ${!p.isActive ? "bg-gray-50 border border-dashed border-gray-200" : "bg-white shadow-sm border border-gray-200 hover:shadow-md hover:scale-[1.01]"}`}
+                  className={`group relative p-4 rounded-[26px] flex items-center gap-4 transition-all duration-300 ${p.points == 0 ? "bg-gray-50 border border-dashed border-gray-200" : "bg-white shadow-sm border border-gray-200 hover:shadow-md hover:scale-[1.01]"}`}
                 >
                   <div
                     className={`w-14 h-14 rounded-[20px] flex items-center justify-center shrink-0 ${p.points == 0 ? "bg-gray-200 text-gray-400" : `bg-gradient-to-br ${meta.iconBg} to-white shadow-inner`}`}
@@ -159,19 +154,14 @@ export default function PointADesktop() {
 
                   <div className="flex-1 min-w-0">
                     <h4
-                      className={`font-bold text-base mb-0.5 ${!p.isActive ? "text-gray-400" : "text-gray-900"}`}
+                      className={`font-bold text-base mb-0.5 ${p.points == 0 ? "text-gray-400" : "text-gray-900"}`}
                     >
                       {p.name}
                     </h4>
-                    {p.hookKey && (
-                      <p className="text-[10px] text-gray-400 font-mono truncate">
-                        hook: {p.hookKey}
-                      </p>
-                    )}
                   </div>
 
                   <div className="text-right shrink-0">
-                    {!p.isActive ? (
+                    {p.points == 0 ? (
                       <span className="text-[10px] font-black uppercase tracking-wider px-3 py-1.5 bg-gray-200 text-gray-500 rounded-lg">
                         {t("comingSoon", "Coming Soon")}
                       </span>
@@ -180,9 +170,9 @@ export default function PointADesktop() {
                         <div className="text-lg font-black text-gray-900 tracking-tight">
                           {formatNumber(p.points)}
                         </div>
-                        <div className="flex flex-col items-end gap-0.5 mt-1">
+                        <div className="flex items-center gap-2 mt-1">
                           <span className="text-xs font-bold text-green-500">
-                            +{formatNumber(p.dailyPoint)} pt daily
+                            +{formatNumber(p.dailyPoint)}
                           </span>
                         </div>
                       </div>

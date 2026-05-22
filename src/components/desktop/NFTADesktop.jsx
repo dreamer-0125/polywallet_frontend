@@ -1,222 +1,221 @@
-import React, { useMemo } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import LayoutADesktop from "./LayoutADesktop";
 import HeaderActionsA from "../variant-a/HeaderActionsA";
 import {
+  Box,
   TrendingUp,
   Sparkles,
   ShieldCheck,
   Zap,
+  Layers,
   X,
   Plus,
   Minus,
-  Gift,
 } from "lucide-react";
 import { useLocale } from "../../i18n";
-import { useWalletConfig, formatRatePercent } from "../../context/WalletConfigContext";
-import NftStatsRow from "../nft/NftStatsRow";
-import NftCollectionTitle from "../nft/NftCollectionTitle";
-import NftMintPriceCard from "../nft/NftMintPriceCard";
-import { useNftCollection } from "../../hooks/useNftCollection";
-
-function NftHeroVisual() {
-  return (
-    
-    <div className="absolute inset-0 flex items-center justify-center origin-center animate-[nft-logo-drift_9s_ease-in-out_infinite]">
-      <svg className="relative z-10 flex h-[min(46vh,300px)] w-[min(46vh,300px)] max-h-[62%] max-w-[62%] items-center justify-center overflow-hidden overflow-visible" role="img" aria-label="NFT" viewBox="-34, -30, 246, 202" preserveAspectRatio="xMidYMid meet">
-                <polygon points="0 62.8 0 23 34.5 3 69 23 69 62.8 34.5 82.7" fill="rgba(56, 189, 248)" stroke="rgba(255, 255, 255)" stroke-width="2.3" stroke-linejoin="round"/>
-                
-                <polygon points="33.8 122.6 33.8 82.8 68.3 62.9 102.8 82.8 102.8 122.6 68.3 142.5" fill="rgba(56, 189, 248)" stroke="rgba(255, 255, 255)" stroke-width="2.3" stroke-linejoin="round"/>
-                <polygon points="109.9 119.6 109.9 79.8 144.3 59.8 178.8 79.8 178.8 119.6 144.3 139.5" fill="rgba(56, 189, 248)" stroke="rgba(255, 255, 255)" stroke-width="2.3" stroke-linejoin="round"/>
-                <polygon points="76 59.7 76 19.9 110.5 0 145 19.9 145 59.7 110.5 79.6" fill="rgba(56, 189, 248)" stroke="rgba(255, 255, 255)" stroke-width="2.3" stroke-linejoin="round"/>
-                <path d="M110.5 8 137.5 23.8" fill="rgba(56, 189, 248)" stroke="rgba(255, 255, 255, 0.25)" stroke-width="4" stroke-linejoin="round"></path>
-                <path d="M34.8 11.5 62 27" fill="rgba(56, 189, 248)" stroke="rgba(255, 255, 255, 0.25)" stroke-width="4" stroke-linejoin="round"></path>
-                <path d="M144.3 68.5 171.3 84.1" fill="rgba(56, 189, 248)" stroke="rgba(255, 255, 255, 0.25)" stroke-width="4" stroke-linejoin="round"></path>
-                <path d="M68.3 71.5 95.4 87" fill="rgba(56, 189, 248)" stroke="rgba(255, 255, 255, 0.25)" stroke-width="4" stroke-linejoin="round"></path>
-      </svg>
-    </div>
-  );
-}
+import { getNftData, nftMint } from "../../api/backendAPI";
+import { toast } from "react-toastify";
+import { useLoadingContext } from "../../context/LoadingContext";
+import { useAuth } from "../../context/AuthContext";
 
 export default function NFTADesktop() {
   const { t } = useLocale();
-  const { balanceInterestApy, maxPointApy } = useWalletConfig();
-  const privileges = useMemo(
-    () => [
-      {
-        icon: Sparkles,
-        labelKey: "exclusiveAirdropRewards",
-        labelDefault: "Exclusive Airdrop Rewards",
-        color: "text-yellow-600 bg-yellow-50",
-      },
-      {
-        icon: Zap,
-        labelKey: "upToPointBoost",
-        labelDefault: `Up to ${formatRatePercent(maxPointApy)} Point Boost`,
-        color: "text-purple-600 bg-purple-50",
-      },
-      {
-        icon: TrendingUp,
-        labelKey: "apyDailyInterestLabel",
-        labelDefault: `${formatRatePercent(balanceInterestApy)} APY Daily Interest`,
-        color: "text-green-600 bg-green-50",
-      },
-      {
-        icon: ShieldCheck,
-        labelKey: "ambassadorProgramAccess",
-        labelDefault: "Ambassador Program Access",
-        color: "text-blue-600 bg-blue-50",
-      },
-    ],
-    [balanceInterestApy, maxPointApy]
-  );
-  const {
-    user,
-    showMintModal,
-    setShowMintModal,
-    quantity,
-    setQuantity,
-    displayNftData,
-    ownedCount,
-    rankLabel,
-    supplyLabel,
-    maxSupply,
-    mintProgress,
-    remainingNfts,
-    heroMintLabel,
-    handleNftMint,
-  } = useNftCollection();
+  const { setLoading } = useLoadingContext();
+  const { user, setUser } = useAuth();
+  const [showMintModal, setShowMintModal] = useState(false);
+  const [quantity, setQuantity] = useState(1);
+
+  const [nftData, setNftData] = useState({});
+
+  const init = useCallback(async () => {
+    setLoading(true);
+    const response = await getNftData(user.id);
+
+    if (response.nftData) {
+      const nftData = response.nftData;
+      setNftData(nftData);
+    }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    init();
+  }, [user]);
+
+  const handleNftMint = async () => {
+    const amount = nftData.nftPrice * quantity;
+    if (amount > user.polyBalance) {
+      toast.info("Your Balance is insufficient!");
+      return;
+    }
+    setLoading(true);
+    const response = await nftMint(user.id, quantity);
+    if (response.user) {
+      toast.success("NFT minted successfully!");
+      setUser(response.user);
+    } else {
+      toast.info("Please try again later!");
+    }
+    setShowMintModal(false);
+    setLoading(false);
+  };
 
   return (
     <LayoutADesktop>
       <div className="space-y-6">
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex min-w-0 items-baseline gap-3">
-            <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-gray-400">
-              {t("collection", "Collection")}
-            </span>
-            <h1 className="font-desktop text-2xl font-extrabold text-gray-900 tracking-tight">  
-              PolyWallet
-              <span className="font-light text-gray-400"> / </span>
-              <span className="font-light text-gray-400">
-                {displayNftData.nftSeries || "Genesis"}
-              </span>
-            </h1>
-          </div>
+        {/* Header with Page Title */}
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-black text-gray-900 tracking-tight">
+            {t("navNft", "NFT")}
+          </h1>
           <HeaderActionsA />
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.08fr)_minmax(390px,0.92fr)] gap-5">
-          {/* Left: narrow hero */}
-          <div className="min-w-0">
-            <div className="h-full min-h-[520px] rounded-[32px] bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 p-1.5 shadow-[0_30px_70px_-24px_rgba(15,23,42,0.55)] ring-1 ring-white/5">
-              <div className="relative h-full min-h-[508px] overflow-hidden rounded-[26px] bg-[#0b1220]">
-                <div
-                  className="absolute inset-0 opacity-40"
-                  style={{
-                    backgroundImage:
-                      "linear-gradient(rgba(56,189,248,0.18) 1px, transparent 1px), linear-gradient(90deg, rgba(56,189,248,0.18) 1px, transparent 1px)",
-                    backgroundSize: "40px 40px",
-                  }}
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-transparent to-transparent" />
+        {/* 2-Column Layout */}
+        <div className="grid grid-cols-12 gap-5">
+          {/* Left Column (Image) - 7 cols */}
+          <div className="col-span-7">
+            <div className="bg-white rounded-[40px] p-2 shadow-sm border border-gray-200 h-full min-h-[380px]">
+              <div className="bg-gray-50 rounded-[32px] h-full w-full relative overflow-hidden flex items-center justify-center group">
+                <div className="absolute top-0 right-0 w-80 h-80 bg-blue-100/50 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3"></div>
+                <div className="absolute bottom-0 left-0 w-64 h-64 bg-purple-100/50 rounded-full blur-3xl translate-y-1/3 -translate-x-1/3"></div>
 
-                <div className="pointer-events-none select-none w-full h-full max-w-full max-h-full" aria-hidden="true">
-                  <NftHeroVisual />
+                <div className="relative z-10 transform group-hover:scale-105 transition-transform duration-700">
+                  <div className="w-40 h-40 bg-white rounded-[40px] shadow-[0_30px_60px_rgba(0,0,0,0.08)] flex items-center justify-center border border-white/50 relative overflow-hidden">
+                    <div className="absolute inset-0 bg-gradient-to-br from-blue-500/10 to-purple-500/10 rounded-[40px]"></div>
+                    <Box
+                      size={50}
+                      className="text-gray-900 relative z-10"
+                      strokeWidth={1.5}
+                    />
+                  </div>
                 </div>
-                <div class="absolute bottom-10 left-1/2 -translate-x-1/2 w-72 h-px bg-gradient-to-r from-transparent via-cyan-300/40 to-transparent"></div>
-
-                <span className="absolute top-4 left-4 inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-white backdrop-blur-md">
-                  <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.9)]" />
-                  {displayNftData.nftSeries} {t("edition", "Edition")}
-                </span>
-                <span className="absolute top-4 right-4 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-[10px] font-bold tabular-nums text-white/90 backdrop-blur-md">
-                  {heroMintLabel}
-                </span>
               </div>
             </div>
           </div>
 
-          {/* Right: badges → title → stats → mint */}
-          <div className="min-w-0 flex flex-col justify-between">
-            <div className="flex flex-col gap-4">
-            <div>
-              <div className="mb-3 flex flex-wrap items-center gap-3">
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-gray-900 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-white">
-                  <span className="h-1.5 w-1.5 rounded-full bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.9)]" />
-                  {t("liveMint", "Live Mint")}
-                </span>
-                <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-500">
-                  {t("verified", "Verified")}
-                </span>
+          {/* Right Column (Info) - 5 cols */}
+          <div className="col-span-5 flex flex-col justify-between">
+            <div className="flex flex-col gap-5">
+              {/* Owned Status */}
+              <div className="bg-white p-6 rounded-[32px] shadow-sm border border-gray-200 flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="w-14 h-14 rounded-2xl bg-gray-900 text-white flex items-center justify-center shadow-lg shadow-gray-200">
+                    <Layers size={26} />
+                  </div>
+                  <div>
+                    <p className="font-bold text-gray-900 text-lg">
+                      {t("owned", "Owned")}
+                    </p>
+                    <span className="mt-1 inline-flex items-center rounded-full bg-blue-50 text-blue-600 text-[10px] font-bold px-2.5 py-1 border border-blue-100">
+                      {t(user.rank, user.rank)}
+                    </span>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <span className="block text-4xl font-black text-gray-900 leading-none">
+                    {user.nftAmount.toLocaleString("en-US")}
+                  </span>
+                  <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">
+                    {t("nfts", "NFTs")}
+                  </span>
+                </div>
               </div>
 
-              <NftCollectionTitle displayNftData={displayNftData} />
+              {/* Price & Progress */}
+              <div className="pt-2">
+                <div className="flex justify-between items-end mb-3">
+                  <div>
+                    <p className="text-gray-400 text-xs font-bold mb-1 uppercase tracking-wide">
+                      {t("mintPrice", "Mint Price")}
+                    </p>
+                    <p className="text-gray-900 text-4xl font-black tracking-tight">
+                      ${nftData?.nftPrice?.toLocaleString("en-US")}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-green-600 text-xs font-bold flex items-center gap-1 justify-end mb-1">
+                      <Sparkles size={12} /> {t("limited", "Limited")}
+                    </p>
+                    <p className="text-gray-400 text-sm font-mono font-bold">
+                      {nftData?.mintedNfts?.toLocaleString("en-US")} /{" "}
+                      {nftData?.nftLimited?.toLocaleString("en-US")}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="h-3 w-full bg-gray-100 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-blue-600 rounded-full shadow-[0_0_10px_rgba(37,99,235,0.3)]"
+                    style={{
+                      width: `${(nftData?.mintedNfts / nftData?.nftLimited) * 100}%`,
+                    }}
+                  ></div>
+                </div>
+              </div>
             </div>
 
-            <NftStatsRow
-              ownedCount={ownedCount}
-              rankLabel={rankLabel}
-              supplyLabel={supplyLabel}
-              maxSupply={maxSupply}
-              variant="desktop"
-            />
-
-            <NftMintPriceCard
-              displayNftData={displayNftData}
-              mintProgress={mintProgress}
-              variant="desktop"
-            />
-            </div>
-            <div className="mt-5">
+            {/* Mint Button aligned to bottom of right block */}
+            <div>
               <button
-                type="button"
                 onClick={() => setShowMintModal(true)}
-                className="flex h-14 w-full items-center justify-center gap-2.5 rounded-[20px] bg-gray-900 text-base font-bold text-white shadow-[0_12px_40px_-8px_rgba(0,0,0,0.35)] transition-all hover:bg-black active:scale-[0.98]"
+                className="w-full h-14 bg-gray-900 text-white rounded-[24px] font-bold text-lg shadow-[0_8px_30px_rgba(0,0,0,0.2)] hover:bg-black hover:scale-[1.01] active:scale-[0.98] transition-all flex items-center justify-center gap-3"
               >
-                <Gift size={20} strokeWidth={2} />
+                <Box size={22} strokeWidth={2} />
                 {t("mintNft", "Mint NFT")}
               </button>
             </div>
-            
-
-            
           </div>
         </div>
 
-        {/* Privileges */}
-        <div>
-          <div className="flex items-baseline justify-between mb-4 px-1">
-            <div className="flex items-baseline gap-3">
-              <span className="text-[10px] font-bold tracking-[0.3em] uppercase text-gray-400">
-                {t("holder", "Holder Benefits")}
-              </span>
-              <h3 className="font-desktop text-2xl font-extrabold text-gray-900 tracking-tight">
-                {t("privileges", "Privileges")}
-              </h3>
-            </div>
-            <span className="text-xs font-bold text-gray-400">
-              {t("perksCountShort", "04 Perks")}
-            </span>
+        {/* Benefits List (Bottom) */}
+        <div className="bg-white rounded-[32px] p-6 shadow-sm border border-gray-200 space-y-5">
+          <div className="flex items-center justify-between px-2">
+            <h3 className="font-bold text-gray-900 text-lg">
+              {t("privileges", "Privileges")}
+            </h3>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-            {privileges.map((item, i) => (
+          <div className="grid grid-cols-2 gap-4">
+            {[
+              {
+                icon: Sparkles,
+                label: t(
+                  "exclusiveAirdropRewards",
+                  "Exclusive Airdrop Rewards",
+                ),
+                color: "text-yellow-600 bg-yellow-50",
+              },
+              {
+                icon: Zap,
+                label: t("upToPointBoost", "Up to 60% Point Boost"),
+                color: "text-purple-600 bg-purple-50",
+              },
+              {
+                icon: TrendingUp,
+                label: t("apyDailyInterestLabel", "10% APY Daily Interest"),
+                color: "text-green-600 bg-green-50",
+              },
+              {
+                icon: ShieldCheck,
+                label: t(
+                  "ambassadorProgramAccess",
+                  "Ambassador Program Access",
+                ),
+                color: "text-blue-600 bg-blue-50",
+              },
+            ].map((item, i) => (
               <div
-                key={item.labelKey}
-                className="bg-white p-5 rounded-[24px] border border-gray-200/80 shadow-[0_2px_10px_rgba(15,23,42,0.04)] hover:shadow-[0_8px_30px_rgba(15,23,42,0.08)] hover:-translate-y-0.5 transition-all duration-300 group"
+                key={i}
+                className="flex gap-4 items-center group p-3 rounded-[20px] hover:bg-gray-50 transition-colors border border-transparent hover:border-gray-100"
               >
-                <div className="flex items-start justify-between">
-                  <div
-                    className={`flex h-10 w-10 items-center justify-center rounded-xl ${item.color}`}
-                  >
-                    <item.icon size={18} strokeWidth={2} />
-                  </div>
-                  <span className="text-[10px] font-bold tabular-nums text-gray-300">
-                    {String(i + 1).padStart(2, "0")}
-                  </span>
+                <div
+                  className={`w-12 h-12 rounded-[18px] flex items-center justify-center shrink-0 transition-colors ${item.color}`}
+                >
+                  <item.icon size={24} />
                 </div>
-                <p className="mt-3 text-sm font-bold leading-snug text-gray-900">
-                  {t(item.labelKey, item.labelDefault)}
+                <p className="font-bold text-gray-900 text-base">
+                  {item.label}
                 </p>
               </div>
             ))}
@@ -224,42 +223,41 @@ export default function NFTADesktop() {
         </div>
       </div>
 
+      {/* Mint Modal - Kept Same */}
       {showMintModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center px-4">
           <div
-            className="absolute inset-0 bg-gray-900/40 backdrop-blur-md"
+            className="absolute inset-0 bg-gray-900/40 backdrop-blur-md transition-opacity"
             onClick={() => setShowMintModal(false)}
-            aria-hidden
-          />
-          <div className="relative z-10 w-full max-w-[420px] rounded-[32px] bg-white p-6 shadow-2xl animate-pop-in">
-            <div className="mb-6 flex items-center justify-between">
+          ></div>
+
+          <div className="bg-white w-full max-w-[420px] rounded-[32px] p-6 shadow-2xl relative z-10 animate-pop-in">
+            <div className="flex justify-between items-center mb-6">
               <h2 className="text-2xl font-black text-gray-900">
                 {t("mintNft", "Mint NFT")}
               </h2>
               <button
-                type="button"
                 onClick={() => setShowMintModal(false)}
-                className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-100 text-gray-500 hover:bg-gray-200"
+                className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 hover:bg-gray-200 transition-colors"
               >
                 <X size={18} />
               </button>
             </div>
 
             <div className="space-y-6">
-              <div className="rounded-[20px] border border-gray-100 bg-gray-50 p-4">
-                <div className="mb-4 flex items-center justify-between">
-                  <span className="text-xs font-bold uppercase tracking-wider text-gray-500">
+              <div className="bg-gray-50 p-4 rounded-[20px] border border-gray-100">
+                <div className="flex justify-between items-center mb-4">
+                  <span className="font-bold text-gray-500 uppercase text-xs tracking-wider">
                     {t("quantity", "Quantity")}
                   </span>
                   <span className="font-black text-gray-900">
                     {quantity} {t("nftLabel", "NFT")}
                   </span>
                 </div>
-                <div className="flex items-center justify-between gap-4">
+                <div className="flex justify-between items-center gap-4">
                   <button
-                    type="button"
                     onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                    className="flex h-12 w-12 items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-900 hover:bg-gray-50"
+                    className="w-12 h-12 bg-white rounded-xl shadow-sm border border-gray-200 flex items-center justify-center text-gray-900 hover:bg-gray-50"
                   >
                     <Minus size={20} />
                   </button>
@@ -282,48 +280,43 @@ export default function NFTADesktop() {
                     className="w-24 bg-transparent text-center text-3xl font-black text-gray-900 outline-none"
                   />
                   <button
-                    type="button"
                     onClick={() => setQuantity(Math.min(100, quantity + 1))}
-                    className="flex h-12 w-12 items-center justify-center rounded-xl bg-gray-900 text-white hover:bg-black"
+                    className="w-12 h-12 bg-gray-900 rounded-xl shadow-lg flex items-center justify-center text-white hover:bg-black"
                   >
                     <Plus size={20} />
                   </button>
                 </div>
               </div>
 
-              <div className="space-y-3 rounded-[20px] border border-gray-100 bg-gray-50 p-4">
-                <div className="flex justify-between">
-                  <span className="text-sm text-gray-500">
+              <div className="bg-gray-50 p-4 rounded-[20px] border border-gray-100 space-y-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm font-medium text-gray-500">
                     {t("pricePerNft", "Price per NFT")}
                   </span>
                   <span className="font-bold text-gray-900">
-                    ${displayNftData.nftPrice.toLocaleString("en-US")}
+                    ${nftData?.nftPrice?.toLocaleString()}
                   </span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-sm text-gray-500">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm font-medium text-gray-500">
                     {t("quantity", "Quantity")}
                   </span>
                   <span className="font-bold text-gray-900">{quantity}</span>
                 </div>
-                <div className="h-px bg-gray-200" />
-                <div className="flex justify-between">
-                  <span className="font-bold text-gray-700">
+                <div className="h-px bg-gray-200"></div>
+                <div className="flex justify-between items-center">
+                  <span className="text-base font-bold text-gray-700">
                     {t("totalCost", "Total Cost")}
                   </span>
                   <span className="text-2xl font-black text-gray-900">
-                    $
-                    {(displayNftData.nftPrice * quantity).toLocaleString(
-                      "en-US",
-                    )}
+                    ${(nftData?.nftPrice * quantity).toLocaleString()}
                   </span>
                 </div>
               </div>
 
               <button
-                type="button"
                 onClick={handleNftMint}
-                className="w-full rounded-[20px] bg-blue-600 py-4 text-lg font-bold text-white shadow-lg hover:bg-blue-700 active:scale-[0.98]"
+                className="w-full py-4 bg-blue-600 text-white rounded-[20px] font-bold text-lg shadow-lg hover:bg-blue-700 active:scale-[0.98] transition-all"
               >
                 {t("confirmMint", "Confirm Mint")}
               </button>

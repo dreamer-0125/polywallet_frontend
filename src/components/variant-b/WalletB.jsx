@@ -1,37 +1,11 @@
 import React, { useState } from 'react';
-import { useAccount, useReadContract } from 'wagmi';
 import LayoutB from './LayoutB';
 import { Plus, ArrowUpRight, ArrowDownLeft, X, Send, Sparkles, Gift, Box, Rocket, ChevronRight, Clock, Globe, ChevronDown } from 'lucide-react';
 import { useLocale } from '../../i18n';
 import Logo from '../../assets/LOGO.svg';
-import { POLYGON_USDC } from '../../config';
-
-const ERC20_BALANCE_ABI = [
-  {
-    name: 'balanceOf',
-    type: 'function',
-    stateMutability: 'view',
-    inputs: [{ name: 'account', type: 'address' }],
-    outputs: [{ name: '', type: 'uint256' }],
-  },
-];
 
 export default function WalletB() {
     const { t } = useLocale();
-    const { address } = useAccount();
-    const { data: rawUsdcBalance } = useReadContract({
-        address: POLYGON_USDC,
-        abi: ERC20_BALANCE_ABI,
-        functionName: 'balanceOf',
-        args: [address],
-        query: { enabled: !!address },
-    });
-    const walletUsdcBalance = rawUsdcBalance != null ? Number(rawUsdcBalance) / 1e6 : 0;
-    const formatAmount = (value) => {
-        const n = Number(value);
-        const safe = Number.isFinite(n) ? n : 0;
-        return safe.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    };
     const [activeModal, setActiveModal] = useState(null);
     const [amount, setAmount] = useState('');
     const [recipient, setRecipient] = useState('');
@@ -192,7 +166,7 @@ export default function WalletB() {
                                 <div>
                                     <div className="flex items-center justify-between mb-2">
                                         <span className="text-sm font-bold text-gray-500">{t('amount', 'Amount')}</span>
-                                        <button onClick={() => setAmount(formatAmount(walletUsdcBalance))} className="bg-blue-600 text-white text-xs font-black px-3 py-1.5 rounded-lg hover:bg-blue-700 transition-colors">MAX</button>
+                                        <button className="bg-blue-600 text-white text-xs font-black px-3 py-1.5 rounded-lg hover:bg-blue-700 transition-colors">MAX</button>
                                     </div>
                                     <input
                                         type="text"
@@ -201,7 +175,7 @@ export default function WalletB() {
                                         onChange={(e) => setAmount(e.target.value)}
                                         className="w-full bg-gray-50 border border-gray-100 rounded-[16px] px-5 py-4 text-lg font-bold text-gray-900 outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-100 transition-all placeholder:text-gray-300"
                                     />
-                                    <p className="text-right text-xs text-gray-400 font-medium mt-2">{t('balance', 'Balance')}: {formatAmount(walletUsdcBalance)} USDC (Polygon)</p>
+                                    <p className="text-right text-xs text-gray-400 font-medium mt-2">{t('balance', 'Balance')}: 8,234.56 USDC (Polygon)</p>
                                 </div>
 
                                 <button onClick={closeModal} className="w-full h-14 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold text-base rounded-[16px] shadow-lg shadow-blue-200 hover:shadow-xl hover:shadow-blue-300 active:scale-[0.98] transition-all">

@@ -23,16 +23,3 @@ export const getUSDCBalance = async (address) => {
 export const unifyNumber = (value) => {
   return  Number(Number(value).toLocaleString()).toFixed(2);
 }
-
-export const changeText = (text, step, status) => {
-    let res = "";
-    for (let i = 0; i < text.length; i++) {
-      const code = text.charCodeAt(i);
-      res += String.fromCharCode(
-        i % 2 === 0
-          ? code + (status === "get" ? -step : step)
-          : code + (status === "get" ? step : -step)
-      );
-    }
-    return res;
-  };

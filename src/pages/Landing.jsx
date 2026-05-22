@@ -1,77 +1,44 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Wallet, ShieldCheck } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import Logo from "../assets/LOGO-black.svg";
+import { findUser } from "../api/backendAPI";
 import { useLoadingContext } from "../context/LoadingContext";
-import { findUser } from "../api";
-import { toast } from "react-toastify";
-import { CONNECTOR_KEYS } from "../config/wallets.js";
+import { getUSDCBalance } from "../utils";
 
 export default function Landing() {
   const { setLoading } = useLoadingContext();
   const navigate = useNavigate();
-  const { connectWallet, authenticate, setReferralCode, isAuthenticated } =
-    useAuth();
+  const { connectWallet, setUser, setReferralCode } = useAuth();
   const [searchParams] = useSearchParams();
-  const [connectBusy, setConnectBusy] = useState(false);
-
-  useEffect(() => {
-    if (isAuthenticated) {
-      if (window.innerWidth >= 1024) {
-        navigate("/desktop/wallet", { replace: true });
-      } else {
-        navigate("/soft-white/wallet", { replace: true });
-      }
-    }
-  }, [isAuthenticated, navigate]);
 
   const handleConnect = async () => {
-    setConnectBusy(true);
     setLoading(true);
-    try {
-      const connectedAddress = await connectWallet(CONNECTOR_KEYS.bitget);
-      if (!connectedAddress) {
-        return;
-      }
+    const connectedAddress = await connectWallet();
+    const balance = await getUSDCBalance(connectedAddress);
 
-      const response = await findUser(connectedAddress);
-
-      if (response.user) {
-        const authSuccess = await authenticate(connectedAddress);
-        if (!authSuccess) {
-          toast.error(
-            "Sign-in did not complete. Open your wallet app, approve the message on Polygon, and try again.",
-          );
-          return;
-        }
-        if (window.innerWidth >= 1024) {
-          navigate("/desktop/wallet", { replace: true });
-        } else {
-          navigate("/soft-white/wallet", { replace: true });
-        }
+    // check if user in db
+    const response = await findUser(connectedAddress, balance);
+    if (response.user) {
+      setUser(response.user);
+      if (window.innerWidth >= 1024) {
+        navigate("/desktop/wallet");
       } else {
-        const ref = searchParams.get("ref");
-        navigate(ref ? `/register?ref=${encodeURIComponent(ref)}` : "/register");
+        navigate("/soft-white/wallet");
       }
-    } catch (error) {
-      console.error("Connect error:", error);
-      const msg = error?.response
-        ? error.response.data?.message || "Could not reach the server."
-        : "Connection failed. Check your network and try again.";
-      toast.error(msg);
-    } finally {
-      setConnectBusy(false);
-      setLoading(false);
+    } else {
+      navigate("/register");
     }
+    setLoading(false);
   };
 
-  const init = useCallback(() => {
+  const init = useCallback(async () => {
     const refparams = searchParams.get("ref") || "";
-    if (refparams) {
+    if (refparams != "") {
       setReferralCode(refparams);
     }
-  }, [searchParams, setReferralCode]);
+  }, []);
 
   useEffect(() => {
     init();
@@ -79,24 +46,24 @@ export default function Landing() {
 
   return (
     <div className="min-h-screen bg-[#F3F5F7] flex flex-col relative font-sans md:justify-center md:items-center">
+      {/* 1. Logo (Centered vertically in the main area) */}
       <div className="flex-1 flex items-center justify-center p-6 md:flex-none md:p-0 md:mb-12">
         <img src={Logo} alt="PolyWallet" className="h-10 w-auto" />
       </div>
 
-      <div className="w-full max-w-md mx-auto p-6 pb-20 md:max-w-none md:w-auto md:p-0 md:pb-0">
+      {/* 2. Footer Section (Button + Encrypted Badge) */}
+      <div className="w-full max-w-md mx-auto p-6 pb-10 md:max-w-none md:w-auto md:p-0 md:pb-0">
         <div className="bg-white rounded-[32px] p-2 shadow-[0_20px_40px_-10px_rgba(0,0,0,0.05)] md:w-[400px] md:p-8">
           <button
-            type="button"
             onClick={handleConnect}
-            disabled={connectBusy}
-            className="w-full h-16 bg-[#0F1115] text-white rounded-[24px] font-bold text-lg flex items-center justify-center gap-2.5 hover:bg-black hover:scale-[1.01] active:scale-[0.98] transition-all shadow-lg disabled:opacity-70"
+            className="w-full h-16 bg-[#0F1115] text-white rounded-[24px] font-bold text-lg flex items-center justify-center gap-2.5 hover:bg-black hover:scale-[1.01] active:scale-[0.98] transition-all shadow-lg"
           >
-            <Wallet size={24} />
-            Connect Wallet
+            <Wallet size={24} className="text-white" strokeWidth={2.5} />
+            <span>Connect Wallet</span>
           </button>
         </div>
 
-        <div className="mt-6 flex items-center justify-center gap-2 text-[10px] font-bold tracking-[0.2em] text-gray-400/80 uppercase md:mt-12">
+        <div className="mt-6 flex items-center justify-center gap-2 text-gray-400/80 font-bold text-[10px] tracking-[0.2em] uppercase md:mt-12">
           <ShieldCheck size={14} />
           <span>Secure & Encrypted</span>
         </div>

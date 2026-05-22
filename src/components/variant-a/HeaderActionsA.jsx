@@ -38,9 +38,9 @@ export default function HeaderActionsA() {
         setShowWalletMenu(false);
     };
 
-    const handleDisconnect = async () => {
+    const handleDisconnect = () => {
         setShowWalletMenu(false);
-        await logout();
+        logout();
         navigate('/');
     };
 

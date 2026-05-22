@@ -14,11 +14,6 @@
   font-family: "Manrope", "Inter", sans-serif;
 }
 
-.Toastify__toast {
-  font-family: "Inter", sans-serif;
-  letter-spacing: 0.05em;
-}
-
 /* Custom Hide Scrollbar */
 .no-scrollbar::-webkit-scrollbar {
   display: none;
