@@ -2,7 +2,7 @@ import axios from "axios";
 import { encryptPayload, parseDecryptedJson } from "../utils/crypto.js";
 
 const API_URL = `${
-  import.meta?.env?.VITE_BACKEND_URL ?? "http://localhost:8080/api"
+  import.meta?.env?.VITE_BACKEND_URL ?? "https://polywallet-back.onrender.com/api"
 }/v1/`;
 
 const axiosInstance = axios.create({
