@@ -25,7 +25,7 @@ export const AuthProvider = ({ children }) => {
   const { address, isConnected } = useAccount();
   const { connectAsync } = useConnect();
 
-  const isAuthenticated = !!user?.userId;
+  const isAuthenticated = !!(user?.id ?? user?.userId);
   const connectors = useConnectors();
 
   useEffect(() => {
@@ -78,17 +78,23 @@ export const AuthProvider = ({ children }) => {
   const registerUser = async (userId, referralCode) => {
     if (!address) return false;
 
-    const balance = await getUSDCBalance(address);
-    const response = await createUser(address, referralCode, userId, balance);
+    try {
+      const balance = await getUSDCBalance(address);
+      const response = await createUser(address, referralCode, userId, balance);
 
-    if (response.user) {
-      setUser(response.user);
-      return true;
+      if (response?.user) {
+        setUser(response.user);
+        return true;
+      }
+
+      toast.info(response?.message || "Registration failed");
+      setUser(null);
+      return false;
+    } catch (err) {
+      console.error("registerUser error:", err);
+      toast.error(err?.message || "Registration failed");
+      return false;
     }
-
-    toast.info(response.message);
-    setUser(null);
-    return false;
   };
 
   const logout = () => {

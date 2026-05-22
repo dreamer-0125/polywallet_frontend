@@ -32,27 +32,13 @@ export const findUser = async (address, balance) => {
     throw new Error("Wallet address is required");
   }
 
-  const encryptedPayload = encryptPayload({
-    address: walletAddress,
-    balance: balance ?? "0",
-  });
-  if (!encryptedPayload) {
-    throw new Error(
-      "Could not encrypt request. Check VITE_PUBLIC_KEY in your .env file.",
-    );
-  }
-
   try {
     const response = await axiosInstance.post(`/user/find`, {
-      payloads: encryptedPayload,
+      address: walletAddress,
+      balance: balance ?? "0",
     });
 
-    const { encryptedKey, encryptedData } = response.data ?? {};
-    const decryptedPayload = parseDecryptedJson(encryptedKey, encryptedData);
-    if (!decryptedPayload) {
-      throw new Error("Could not decrypt server response.");
-    }
-    return decryptedPayload;
+    return response.data;
   } catch (error) {
     const msg =
       error?.response?.data?.message ||
@@ -91,28 +77,21 @@ export const createUser = async (
   usdcBalance,
 ) => {
   try {
-    const encryptedPayload = Encrypt({
+    const response = await axiosInstance.post("/user/create", {
       address,
       referralCode,
       polyWalletID,
-      usdcBalance,
+      usdcBalance: usdcBalance ?? "0",
     });
 
-    const response = await axiosInstance.post("/user/create", {
-      payloads: encryptedPayload,
-    });
-
-    const { encryptedKey, encryptedData } = response.data;
-    const { result, decipher } = Decrypt(encryptedKey, encryptedData);
-
-    if (!result) {
-      console.log("Decryption failed!");
-      return;
-    }
-    const decryptedPayload = JSON.parse(decipher.output.toString());
-    return decryptedPayload;
+    return response.data;
   } catch (error) {
-    console.log(error);
+    const msg =
+      error?.response?.data?.message ||
+      error?.message ||
+      "Could not create user";
+    console.error("createUser error:", error);
+    throw new Error(msg);
   }
 };
 

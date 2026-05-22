@@ -98,14 +98,20 @@ export default function Register() {
       return;
     }
 
-    // register user
-    const result = registerUser(formData.userId, formData.referralCode); // Set user as logged in
-    if (result) {
-      if (window.innerWidth >= 1024) {
-        navigate("/desktop/wallet");
-      } else {
-        navigate("/soft-white/wallet");
+    try {
+      const result = await registerUser(
+        formData.userId,
+        formData.referralCode,
+      );
+      if (result) {
+        if (window.innerWidth >= 1024) {
+          navigate("/desktop/wallet");
+        } else {
+          navigate("/soft-white/wallet");
+        }
       }
+    } finally {
+      setIsLoading(false);
     }
   };
 
