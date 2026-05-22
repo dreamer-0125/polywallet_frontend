@@ -15,6 +15,7 @@ import { useLoadingContext } from "../../context/LoadingContext";
 import { useAuth } from "../../context/AuthContext";
 import { format } from "date-fns";
 import { getUSDCBalance } from "../../utils";
+import { formatAmount } from "../../utils/format";
 import { deposit, getAllIDs, sendBalance, withdraw } from "../../api/backendAPI";
 import { toast } from "react-toastify";
 
@@ -30,12 +31,6 @@ export default function WalletADesktop() {
   const [allIDs, setAllIDs] = useState([]);
   const [isMatch, setIsMatch] = useState(true);
   const [walletID, setWalletID] = useState("");
-
-  const formatAmount = (value) =>
-    value.toLocaleString("en-US", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    });
 
   const openModal = async (modal) => {
     setActiveModal(modal);

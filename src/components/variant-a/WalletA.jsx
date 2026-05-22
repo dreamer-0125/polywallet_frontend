@@ -24,6 +24,7 @@ import {
   withdraw,
 } from "../../api/backendAPI";
 import { getUSDCBalance } from "../../utils";
+import { formatAmount } from "../../utils/format";
 import { toast } from "react-toastify";
 import { format } from "date-fns";
 
@@ -52,12 +53,6 @@ export default function WalletA() {
     window.addEventListener("resize", checkSize);
     return () => window.removeEventListener("resize", checkSize);
   }, [navigate]);
-
-  const formatAmount = (value) =>
-    value.toLocaleString("en-US", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    });
 
   const openModal = async (modal) => {
     setActiveModal(modal);

@@ -21,5 +21,10 @@ export const getUSDCBalance = async (address) => {
 
 
 export const unifyNumber = (value) => {
-  return  Number(Number(value).toLocaleString()).toFixed(2);
-}
+  const n = Number(value);
+  const safe = Number.isFinite(n) ? n : 0;
+  return Number(safe.toLocaleString()).toFixed(2);
+};
+
+export { formatAmount, formatInteger } from "./format.js";
+export { normalizeWalletUser } from "./userModel.js";

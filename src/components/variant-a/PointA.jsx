@@ -16,10 +16,11 @@ import { useAuth } from "../../context/AuthContext";
 import { getAirdrop } from "../../api/backendAPI";
 import { RankData } from "../../config/data.config";
 import { useLoadingContext } from "../../context/LoadingContext";
+import { formatInteger } from "../../utils/format";
 
 export default function PointA() {
   const { t } = useLocale();
-  const formatNumber = (value) => value.toLocaleString("en-US");
+  const formatNumber = formatInteger;
   const { user } = useAuth();
   const { setLoading } = useLoadingContext();
   const [airdropData, setAirdropData] = useState([]);

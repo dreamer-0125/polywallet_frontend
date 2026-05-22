@@ -202,7 +202,7 @@ export default function NFTA() {
             </div>
             <div className="text-right">
               <span className="text-3xl font-black text-gray-900">
-                {user.nftAmount.toLocaleString("en-US")}
+                {(user?.nftAmount ?? 0).toLocaleString("en-US")}
               </span>
               <span className="text-sm font-bold text-gray-400 ml-1">
                 {t("nfts", "NFTs")}

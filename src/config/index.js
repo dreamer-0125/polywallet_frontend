@@ -3,9 +3,7 @@ import { polygon } from "wagmi/chains";
 import { injected, walletConnect } from "wagmi/connectors";
 import { isMobileBrowser } from "../utils/device.js";
 
-const projectId =
-  import.meta.env.VITE_WALLETCONNECT_PROJECT_ID ??
-  "a28ade7e3fd9653b6d84bc72a8e4f32c";
+const walletConnectProjectId = import.meta.env.VITE_WALLETCONNECT_PROJECT_ID;
 
 const bitgetInjected = injected({
   target: {
@@ -36,26 +34,34 @@ const trustInjected = injected({
   shimDisconnect: true,
 });
 
-const walletConnectConnector = walletConnect({
-  projectId,
-  showQrModal: !isMobileBrowser(),
-  metadata: {
-    name: "PolyWallet",
-    description: "PolyWallet — Polygon USDC wallet",
-    url: typeof window !== "undefined" ? window.location.origin : "https://polywallet.app",
-    icons: ["https://web3.bitget.com/favicon.ico"],
-  },
-  optionalChains: [polygon.id],
-});
+const connectors = [bitgetInjected, metaMaskInjected, trustInjected];
+
+if (walletConnectProjectId) {
+  connectors.push(
+    walletConnect({
+      projectId: walletConnectProjectId,
+      showQrModal: !isMobileBrowser(),
+      metadata: {
+        name: "PolyWallet",
+        description: "PolyWallet — Polygon USDC wallet",
+        url:
+          typeof window !== "undefined"
+            ? window.location.origin
+            : "https://polywallet.app",
+        icons: ["https://web3.bitget.com/favicon.ico"],
+      },
+      optionalChains: [polygon.id],
+    }),
+  );
+} else if (isMobileBrowser()) {
+  console.warn(
+    "VITE_WALLETCONNECT_PROJECT_ID is required for mobile Bitget connection.",
+  );
+}
 
 export const config = createConfig({
   chains: [polygon],
-  connectors: [
-    bitgetInjected,
-    metaMaskInjected,
-    trustInjected,
-    walletConnectConnector,
-  ],
+  connectors,
   transports: {
     [polygon.id]: http("https://polygon.api.onfinality.io/public"),
   },

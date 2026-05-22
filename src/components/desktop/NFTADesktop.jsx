@@ -114,7 +114,7 @@ export default function NFTADesktop() {
                 </div>
                 <div className="text-right">
                   <span className="block text-4xl font-black text-gray-900 leading-none">
-                    {user.nftAmount.toLocaleString("en-US")}
+                    {(user?.nftAmount ?? 0).toLocaleString("en-US")}
                   </span>
                   <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">
                     {t("nfts", "NFTs")}

@@ -10,6 +10,7 @@ import { useAccount, useConnect, useConnectors } from "wagmi";
 import { createUser } from "../api/backendAPI";
 import { toast } from "react-toastify";
 import { getUSDCBalance } from "../utils";
+import { normalizeWalletUser } from "../utils/userModel";
 import WalletPickerModal from "../components/WalletPickerModal";
 import { isBitgetInjectedAvailable } from "../utils/bitgetWallet";
 import { isMobileBrowser, isBitgetInAppBrowser } from "../utils/device";
@@ -40,7 +41,11 @@ const AuthContext = createContext({
 });
 
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
+  const [user, setUserState] = useState(null);
+
+  const setUser = useCallback((value) => {
+    setUserState(value ? normalizeWalletUser(value) : null);
+  }, []);
   const [referralCode, setReferralCode] = useState("");
   const [walletPickerOpen, setWalletPickerOpen] = useState(false);
   const pendingConnectRef = useRef(null);
